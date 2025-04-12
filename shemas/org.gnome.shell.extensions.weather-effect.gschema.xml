@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.weather-effect" path="/org/gnome/shell/extensions/weather-effect/">
+    <key name="effect-type" type="s">
+      <default>"snow"</default>
+      <choices>
+        <choice value="snow"/>
+        <choice value="rain"/>
+      </choices>
+      <summary>Effect type</summary>
+      <description>Select the weather effect: snow or rain.</description>
+    </key>
+    <key name="particle-count" type="i">
+      <default>10</default>
+      <range min="5" max="50"/>
+      <summary>Particle count</summary>
+      <description>Number of falling particles (5 to 50).</description>
+    </key>
+    <key name="particle-size" type="i">
+      <default>4</default>
+      <range min="4" max="32"/>
+      <summary>Particle size</summary>
+      <description>Size of falling particles in pixels (4 to 32).</description>
+    </key>
+    <key name="speed" type="i">
+      <default>1</default>
+      <range min="0" max="2"/>
+      <summary>Speed</summary>
+      <description>Speed of falling particles: 0 = slow, 1 = medium, 2 = fast.</description>
+    </key>
+    <key name="snow-color" type="s">
+      <default>"white"</default>
+      <summary>Snow color</summary>
+      <description>Color of snow particles: white, light blue, or silver.</description>
+    </key>
+    <key name="rain-color" type="s">
+      <default>"gray"</default>
+      <summary>Rain color</summary>
+      <description>Color of rain particles: gray or dark blue.</description>
+    </key>
+    <key name="snow-emoji" type="s">
+      <default>""</default>
+      <summary>Snow emoji</summary>
+      <description>Custom emoji for snow particles (e.g., ❄, ❅, ❆). Leave empty for default circular shape.</description>
+    </key>
+    <key name="rain-emoji" type="s">
+      <default>""</default>
+      <summary>Rain emoji</summary>
+      <description>Custom emoji for rain particles (e.g., 💧). Leave empty for default rectangular shape.</description>
+    </key>
+  </schema>
+</schemalist>
