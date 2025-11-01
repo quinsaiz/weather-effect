@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.weather-effect" path="/org/gnome/shell/extensions/weather-effect/">
+    <key name="display-mode" type="s">
+      <default>"wallpaper"</default>
+      <choices>
+        <choice value="wallpaper"/>
+        <choice value="screen"/>
+      </choices>
+      <summary>Display mode</summary>
+      <description>Where to render the effect: only on wallpaper background or as full-screen overlay.</description>
+    </key>
     <key name="effect-type" type="s">
       <default>"snow"</default>
       <choices>

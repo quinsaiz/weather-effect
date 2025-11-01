@@ -2,7 +2,10 @@
   "name": "Weather Effect",
   "description": "Adds a weather effect (snow or rain) to your GNOME wallpaper.",
   "uuid": "weather-effect@quinsaiz.github",
-  "shell-version": ["45", "46", "47", "48"],
+  "shell-version": ["45", "46", "47", "48", "49"],
   "settings-schema": "org.gnome.shell.extensions.weather-effect",
-  "url": "https://github.com/quinsaiz/weather-effect"
+  "url": "https://github.com/quinsaiz/weather-effect",
+  "author": "quinsaiz",
+  "version": "1.0"
+  
 }
