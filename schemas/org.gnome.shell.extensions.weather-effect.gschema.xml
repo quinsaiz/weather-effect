@@ -33,9 +33,9 @@
     </key>
     <key name="speed" type="i">
       <default>1</default>
-      <range min="0" max="2"/>
+      <range min="0" max="3"/>
       <summary>Speed</summary>
-      <description>Speed of falling particles: 0 = slow, 1 = medium, 2 = fast.</description>
+      <description>0=ultra-slow, 1=slow, 2=medium, 3=fast</description>
     </key>
     <key name="snow-color" type="s">
       <default>"white"</default>

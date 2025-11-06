@@ -6,6 +6,5 @@
   "settings-schema": "org.gnome.shell.extensions.weather-effect",
   "url": "https://github.com/quinsaiz/weather-effect",
   "author": "quinsaiz",
-  "version": "1.0"
-  
+  "version": "1.1"
 }

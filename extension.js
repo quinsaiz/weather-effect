@@ -1,113 +1,136 @@
 // @ts-nocheck
-import GObject from 'gi://GObject';
-import Clutter from 'gi://Clutter';
-import St from 'gi://St';
-import GLib from 'gi://GLib';
-import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
-import { QuickMenuToggle, SystemIndicator } from 'resource:///org/gnome/shell/ui/quickSettings.js';
+import GObject from "gi://GObject";
+import Clutter from "gi://Clutter";
+import St from "gi://St";
+import GLib from "gi://GLib";
+import Meta from "gi://Meta";
+import * as Main from "resource:///org/gnome/shell/ui/main.js";
+import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
+import { QuickMenuToggle, SystemIndicator, } from "resource:///org/gnome/shell/ui/quickSettings.js";
 const WeatherToggle = GObject.registerClass(class WeatherToggle extends QuickMenuToggle {
     _settings;
     _snowButton = null;
     _rainButton = null;
     _buttonBox = null;
+    _settingsHandler = null;
     constructor(settings) {
-        super({ title: 'Weather Effect', iconName: 'weather-snow-symbolic' });
+        super({ title: "Weather Effect", iconName: "weather-snow-symbolic" });
         this._settings = settings;
         this.checked = true;
         this._buttonBox = new St.BoxLayout({
-            style_class: 'popup-menu-item',
+            style_class: "popup-menu-item",
             reactive: true,
             x_expand: true,
         });
         const snowBox = new St.BoxLayout({
-            style_class: 'keyboard-brightness-level',
+            style_class: "keyboard-brightness-level",
             orientation: Clutter.Orientation.VERTICAL,
             x_expand: true,
         });
         const snowLabel = new St.Label({
-            text: 'Snow',
+            text: "Snow",
             x_align: Clutter.ActorAlign.CENTER,
         });
         this._snowButton = new St.Button({
-            style_class: 'icon-button',
+            style_class: "icon-button",
             can_focus: true,
-            icon_name: 'weather-snow-symbolic',
+            icon_name: "weather-snow-symbolic",
             label_actor: snowLabel,
             checked: false,
         });
         snowBox.add_child(this._snowButton);
         snowBox.add_child(snowLabel);
         this._buttonBox.add_child(snowBox);
-        this._snowButton.connect('clicked', () => {
-            this._settings.set_string('effect-type', 'snow');
+        this._snowButton.connect("clicked", () => {
+            this._settings.set_string("effect-type", "snow");
             this.checked = true;
             this._updateButtons();
-            this.iconName = 'weather-snow-symbolic';
-            log('Weather Effect: Snow selected');
+            this.iconName = "weather-snow-symbolic";
+            //log("Weather Effect: Snow selected");
         });
         const rainBox = new St.BoxLayout({
-            style_class: 'keyboard-brightness-level',
+            style_class: "keyboard-brightness-level",
             orientation: Clutter.Orientation.VERTICAL,
             x_expand: true,
         });
         const rainLabel = new St.Label({
-            text: 'Rain',
+            text: "Rain",
             x_align: Clutter.ActorAlign.CENTER,
         });
         this._rainButton = new St.Button({
-            style_class: 'icon-button',
+            style_class: "icon-button",
             can_focus: true,
-            icon_name: 'weather-showers-symbolic',
+            icon_name: "weather-showers-symbolic",
             label_actor: rainLabel,
             checked: false,
         });
         rainBox.add_child(this._rainButton);
         rainBox.add_child(rainLabel);
         this._buttonBox.add_child(rainBox);
-        this._rainButton.connect('clicked', () => {
-            this._settings.set_string('effect-type', 'rain');
+        this._rainButton.connect("clicked", () => {
+            this._settings.set_string("effect-type", "rain");
             this.checked = true;
             this._updateButtons();
-            this.iconName = 'weather-showers-symbolic';
-            log('Weather Effect: Rain selected');
+            this.iconName = "weather-showers-symbolic";
+            //log("Weather Effect: Rain selected");
         });
         this.menu.box.add_child(this._buttonBox);
-        this.connect('clicked', () => {
+        this.connect("clicked", () => {
             this.checked = !this.checked;
             this._updateButtons();
-            log(`Weather Effect: Toggle clicked, checked: ${this.checked}, effect-type: ${this._settings.get_string('effect-type')}`);
+            //log(`Weather Effect: Toggle clicked, checked: ${this.checked}, effect-type: ${this._settings.get_string("effect-type")}`);
         });
-        this._settings.connect('changed::effect-type', () => {
+        this._settingsHandler = this._settings.connect("changed::effect-type", () => {
             this._updateButtons();
-            const effectType = this._settings.get_string('effect-type');
-            this.iconName = effectType === 'snow' ? 'weather-snow-symbolic' : 'weather-showers-symbolic';
+            const effectType = this._settings.get_string("effect-type");
+            this.iconName =
+                effectType === "snow"
+                    ? "weather-snow-symbolic"
+                    : "weather-showers-symbolic";
         });
         this._updateButtons();
     }
     _updateButtons() {
-        const effectType = this._settings.get_string('effect-type');
+        if (!this._settings || !this._snowButton || !this._rainButton)
+            return;
+        const effectType = this._settings.get_string("effect-type");
         const isActive = this.checked;
-        if (this._snowButton && this._rainButton) {
-            if (effectType === 'snow' && isActive) {
-                this._snowButton.checked = true;
-                this._rainButton.checked = false;
-            }
-            else if (effectType === 'rain' && isActive) {
-                this._rainButton.checked = true;
-                this._snowButton.checked = false;
-            }
-            else {
-                this._snowButton.checked = false;
-                this._rainButton.checked = false;
-            }
+        if (effectType === "snow" && isActive) {
+            this._snowButton.checked = true;
+            this._rainButton.checked = false;
         }
+        else if (effectType === "rain" && isActive) {
+            this._rainButton.checked = true;
+            this._snowButton.checked = false;
+        }
+        else {
+            this._snowButton.checked = false;
+            this._rainButton.checked = false;
+        }
+    }
+    vfunc_destroy() {
+        if (this._settingsHandler && this._settings) {
+            try {
+                this._settings.disconnect(this._settingsHandler);
+            }
+            catch (e) {
+                // Already disconnected
+            }
+            this._settingsHandler = null;
+        }
+        this._settings = null;
+        this._snowButton = null;
+        this._rainButton = null;
+        this._buttonBox = null;
+        super.vfunc_destroy();
     }
 });
 const WeatherIndicator = GObject.registerClass(class WeatherIndicator extends SystemIndicator {
     toggle;
     _indicator;
     _settings;
+    _settingsHandler = null;
+    _toggleHandler = null;
     constructor(settings) {
         super();
         this._indicator = this._addIndicator();
@@ -115,13 +138,30 @@ const WeatherIndicator = GObject.registerClass(class WeatherIndicator extends Sy
         this.toggle = new WeatherToggle(settings);
         this.quickSettingsItems.push(this.toggle);
         this._updateIndicatorIcon();
-        this._settings.connect('changed::effect-type', () => this._updateIndicatorIcon());
-        this.toggle.connect('notify::checked', () => this._updateIndicatorIcon());
+        this._settingsHandler = this._settings.connect("changed::effect-type", () => this._updateIndicatorIcon());
+        this._toggleHandler = this.toggle.connect("notify::checked", () => this._updateIndicatorIcon());
     }
     _updateIndicatorIcon() {
-        const effectType = this._settings.get_string('effect-type');
+        if (!this._settings || !this.toggle || !this._indicator)
+            return;
+        const effectType = this._settings.get_string("effect-type");
         const checked = this.toggle.checked;
-        this._indicator.iconName = checked ? (effectType === 'snow' ? 'weather-snow-symbolic' : 'weather-showers-symbolic') : 'weather-clear-symbolic';
+        this._indicator.iconName = checked
+            ? effectType === "snow"
+                ? "weather-snow-symbolic"
+                : "weather-showers-symbolic"
+            : "weather-clear-symbolic";
+    }
+    vfunc_destroy() {
+        if (this._settingsHandler && this._settings) {
+            this._settings.disconnect(this._settingsHandler);
+            this._settingsHandler = null;
+        }
+        this._settings = null;
+        this._snowButton = null;
+        this._rainButton = null;
+        this._buttonBox = null;
+        super.vfunc_destroy();
     }
 });
 export default class WeatherEffectExtension extends Extension {
@@ -136,42 +176,46 @@ export default class WeatherEffectExtension extends Extension {
     _monitorsChangedHandler = null;
     _workareasChangedHandler = null;
     _settingsHandlers = [];
+    _workspaceChangedHandler = null;
+    _windowCreatedHandler = null;
+    _monitorObscuredCache = new Map();
     enable() {
-        log('Weather Effect: Enabling extension');
+        //log("Weather Effect: Enabling extension");
         this._settings = this.getSettings();
-        log(`Weather Effect: Initial effect-type: ${this._settings.get_string('effect-type')}`);
+        //log(`Weather Effect: Initial effect-type: ${this._settings.get_string("effect-type")}`);
         this._indicator = new WeatherIndicator(this._settings);
         Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
         this.monitorActors = [];
         this._createMonitorActors();
-        this._overviewHandler = Main.overview.connect('showing', () => {
-            const mode = this._settings.get_string('display-mode');
-            if (mode === 'wallpaper') {
+        this._overviewHandler = Main.overview.connect("showing", () => {
+            const mode = this._settings.get_string("display-mode");
+            if (mode === "wallpaper") {
                 this._stopAnimation();
-                log('Weather Effect: Overview shown, animation stopped');
+                //log("Weather Effect: Overview shown, animation stopped");
             }
             else {
                 this._syncToggleState();
-                log('Weather Effect: Overview shown, syncing state for screen mode');
+                //log("Weather Effect: Overview shown, syncing state for screen mode");
             }
         });
-        this._overviewHideHandler = Main.overview.connect('hidden', () => {
+        this._overviewHideHandler = Main.overview.connect("hidden", () => {
+            this._recomputeObscuration();
             this._syncToggleState();
-            log('Weather Effect: Overview hidden, syncing state');
+            //log("Weather Effect: Overview hidden, syncing state");
         });
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
             this._syncToggleState();
-            log('Weather Effect: Checked state after boot');
+            //log("Weather Effect: Checked state after boot");
             return GLib.SOURCE_REMOVE;
         });
-        this._indicator.toggle.connect('notify::checked', () => {
+        this._indicator.toggle.connect("notify::checked", () => {
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
                 this._syncToggleState();
-                log('Weather Effect: Toggle state changed');
+                //log("Weather Effect: Toggle state changed");
                 return GLib.SOURCE_REMOVE;
             });
         });
-        this._settingsHandlers.push(this._settings.connect('changed::effect-type', () => this._indicator.toggle._updateCheckmarks()), this._settings.connect('changed::display-mode', () => {
+        this._settingsHandlers.push(this._settings.connect("changed::display-mode", () => {
             const wasRunning = !!this.timeoutId;
             this._stopAnimation();
             this._attachMonitorActors();
@@ -184,20 +228,60 @@ export default class WeatherEffectExtension extends Extension {
             else {
                 this._syncToggleState();
             }
-            log('Weather Effect: Display mode changed, actors reattached');
+            //log("Weather Effect: Display mode changed, actors reattached");
         }));
-        this._monitorsChangedHandler = Main.layoutManager.connect('monitors-changed', () => {
+        this._monitorsChangedHandler = Main.layoutManager.connect("monitors-changed", () => {
+            //log("Weather Effect: Monitors changed");
+            this._monitorObscuredCache.clear();
             this._destroyMonitorActors();
             this._createMonitorActors();
+            this._recomputeObscuration();
             this._syncToggleState();
         });
-        this._workareasChangedHandler = global.display.connect('workareas-changed', () => {
+        this._workareasChangedHandler = global.display.connect("workareas-changed", () => {
+            //log("Weather Effect: Workareas changed");
             this._updateMonitorActors();
+            this._recomputeObscuration();
+            this._syncToggleState();
         });
-        this._windowHandler = global.window_manager.connect('size-changed', () => {
+        this._workspaceChangedHandler = global.workspace_manager.connect("active-workspace-changed", () => {
+            //log("Weather Effect: Active workspace changed");
+            const mode = this._settings.get_string("display-mode");
+            if (mode === "wallpaper") {
+                for (const monitorActor of this.monitorActors) {
+                    if (monitorActor.particles.length > 0) {
+                        monitorActor.particles.forEach((p) => {
+                            p.remove_all_transitions();
+                            p.destroy();
+                        });
+                        monitorActor.particles = [];
+                    }
+                }
+            }
             if (this._debounceTimeout)
                 GLib.source_remove(this._debounceTimeout);
             this._debounceTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                this._recomputeObscuration();
+                this._syncToggleState();
+                this._debounceTimeout = null;
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+        this._windowCreatedHandler = global.display.connect("window-created", () => {
+            if (this._debounceTimeout)
+                GLib.source_remove(this._debounceTimeout);
+            this._debounceTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                this._recomputeObscuration();
+                this._syncToggleState();
+                this._debounceTimeout = null;
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+        this._windowHandler = global.window_manager.connect("size-changed", () => {
+            if (this._debounceTimeout)
+                GLib.source_remove(this._debounceTimeout);
+            this._debounceTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                this._recomputeObscuration();
                 this._syncToggleState();
                 this._debounceTimeout = null;
                 return GLib.SOURCE_REMOVE;
@@ -205,7 +289,7 @@ export default class WeatherEffectExtension extends Extension {
         });
     }
     disable() {
-        log('Weather Effect: Disabling extension');
+        //log("Weather Effect: Disabling extension");
         this._stopAnimation();
         if (this._overviewHandler) {
             Main.overview.disconnect(this._overviewHandler);
@@ -223,6 +307,14 @@ export default class WeatherEffectExtension extends Extension {
             global.display.disconnect(this._workareasChangedHandler);
             this._workareasChangedHandler = null;
         }
+        if (this._workspaceChangedHandler) {
+            global.workspace_manager.disconnect(this._workspaceChangedHandler);
+            this._workspaceChangedHandler = null;
+        }
+        if (this._windowCreatedHandler) {
+            global.display.disconnect(this._windowCreatedHandler);
+            this._windowCreatedHandler = null;
+        }
         if (this._windowHandler) {
             global.window_manager.disconnect(this._windowHandler);
             this._windowHandler = null;
@@ -231,10 +323,12 @@ export default class WeatherEffectExtension extends Extension {
             GLib.source_remove(this._debounceTimeout);
             this._debounceTimeout = null;
         }
-        this._settingsHandlers.forEach(id => this._settings.disconnect(id));
+        this._settingsHandlers.forEach((id) => this._settings.disconnect(id));
         this._settingsHandlers = [];
-        this._indicator.quickSettingsItems.forEach((item) => item.destroy());
-        this._indicator.destroy();
+        if (this._indicator) {
+            this._indicator.destroy();
+            this._indicator = null;
+        }
         this._destroyMonitorActors();
     }
     _createMonitorActors() {
@@ -255,14 +349,15 @@ export default class WeatherEffectExtension extends Extension {
             });
         }
         this._attachMonitorActors();
+        this._recomputeObscuration();
     }
     _attachMonitorActors() {
-        const mode = this._settings.get_string('display-mode');
+        const mode = this._settings.get_string("display-mode");
         for (const monitorActor of this.monitorActors) {
             const parent = monitorActor.actor.get_parent();
             if (parent)
                 parent.remove_child(monitorActor.actor);
-            if (mode === 'screen') {
+            if (mode === "screen") {
                 Main.layoutManager.uiGroup.add_child(monitorActor.actor);
             }
             else {
@@ -276,14 +371,14 @@ export default class WeatherEffectExtension extends Extension {
         for (let i = this.monitorActors.length - 1; i >= 0; i--) {
             const monitorActor = this.monitorActors[i];
             if (!monitors.find((m) => m.x === monitorActor.monitor.x && m.y === monitorActor.monitor.y)) {
-                monitorActor.particles.forEach(p => p.destroy());
+                monitorActor.particles = [];
                 monitorActor.actor.destroy();
                 this.monitorActors.splice(i, 1);
             }
         }
         for (let i = 0; i < monitors.length; i++) {
             const monitor = monitors[i];
-            let monitorActor = this.monitorActors.find(ma => ma.monitor.x === monitor.x && ma.monitor.y === monitor.y);
+            let monitorActor = this.monitorActors.find((ma) => ma.monitor.x === monitor.x && ma.monitor.y === monitor.y);
             if (!monitorActor) {
                 const actor = new Clutter.Actor({
                     width: monitor.width,
@@ -309,28 +404,46 @@ export default class WeatherEffectExtension extends Extension {
     }
     _destroyMonitorActors() {
         for (const monitorActor of this.monitorActors) {
-            monitorActor.particles.forEach(p => p.destroy());
+            monitorActor.particles.forEach((p) => {
+                p.remove_all_transitions();
+                p.destroy();
+            });
+            monitorActor.particles = [];
             monitorActor.actor.destroy();
         }
         this.monitorActors = [];
     }
     _syncToggleState() {
-        const mode = this._settings.get_string('display-mode');
-        const shouldRun = this._indicator.toggle.checked &&
-            (mode === 'screen' || (!Main.overview.visible && !this._isDesktopObscured()));
+        if (!this._indicator || !this._indicator.toggle)
+            return;
+        const mode = this._settings.get_string("display-mode");
+        let shouldRun = false;
+        if (this._indicator.toggle.checked) {
+            if (mode === "screen") {
+                shouldRun = true;
+            }
+            else {
+                if (!Main.overview.visible) {
+                    const anyActive = this.monitorActors.some((ma) => this._canRunOnMonitor(ma));
+                    shouldRun = anyActive;
+                }
+            }
+        }
         const isRunning = !!this.timeoutId;
         if (shouldRun && !isRunning) {
+            //log("Weather Effect: Starting animation");
             this._startAnimation();
         }
         else if (!shouldRun && isRunning) {
+            //log("Weather Effect: Stopping animation");
             this._stopAnimation();
         }
     }
     _startAnimation() {
         if (this.timeoutId)
             return;
-        const mode = this._settings.get_string('display-mode');
-        if (mode === 'wallpaper' && Main.overview.visible)
+        const mode = this._settings.get_string("display-mode");
+        if (mode === "wallpaper" && Main.overview.visible)
             return;
         this.timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
             this._animateParticles();
@@ -343,60 +456,161 @@ export default class WeatherEffectExtension extends Extension {
             this.timeoutId = null;
         }
         for (const monitorActor of this.monitorActors) {
-            monitorActor.particles.forEach(p => p.destroy());
+            monitorActor.particles.forEach((p) => {
+                p.remove_all_transitions();
+                p.destroy();
+            });
             monitorActor.particles = [];
         }
     }
-    _isDesktopObscured() {
-        const monitor = Main.layoutManager.primaryMonitor;
-        const windows = global.get_window_actors()
+    _isMonitorObscured(monitor) {
+        const activeWs = global.workspace_manager.get_active_workspace();
+        const workArea = {
+            x1: monitor.x,
+            y1: monitor.y,
+            x2: monitor.x + monitor.width,
+            y2: monitor.y + monitor.height,
+        };
+        const windows = global
+            .get_window_actors()
             .map((actor) => actor.meta_window)
-            .filter(w => w.get_monitor() === monitor.index && !w.minimized);
-        if (windows.length === 1) {
-            const win = windows[0];
-            return win.is_fullscreen() || (win.maximized_horizontally && win.maximized_vertically);
+            .filter((w) => !w.minimized &&
+            w.get_workspace() === activeWs &&
+            w.get_monitor() === monitor.index &&
+            w.get_window_type() === Meta.WindowType.NORMAL);
+        if (windows.some((w) => w.is_fullscreen())) {
+            return true;
         }
-        else if (windows.length >= 2) {
-            const allMaxH = windows.every(w => w.maximized_horizontally && !w.maximized_vertically);
-            const allMaxV = windows.every(w => !w.maximized_horizontally && w.maximized_vertically);
-            return allMaxH || allMaxV;
+        const rects = windows
+            .map((w) => {
+            const r = w.get_frame_rect();
+            const x1 = Math.max(r.x, workArea.x1);
+            const y1 = Math.max(r.y, workArea.y1);
+            const x2 = Math.min(r.x + r.width, workArea.x2);
+            const y2 = Math.min(r.y + r.height, workArea.y2);
+            return x2 > x1 && y2 > y1
+                ? { x1, y1, x2, y2 }
+                : { x1: 0, y1: 0, x2: 0, y2: 0 };
+        })
+            .filter((r) => r.x2 > r.x1 && r.y2 > r.y1);
+        if (rects.length === 0) {
+            return false;
         }
-        return false;
+        const covered = this._rectUnionArea(rects);
+        const area = monitor.width * monitor.height;
+        const ratio = covered / area;
+        return ratio >= 0.95;
+    }
+    _rectUnionArea(rects) {
+        const events = [];
+        for (const r of rects) {
+            events.push({ x: r.x1, y1: r.y1, y2: r.y2, type: 1 });
+            events.push({ x: r.x2, y1: r.y1, y2: r.y2, type: -1 });
+        }
+        events.sort((a, b) => a.x - b.x);
+        let prevX = 0;
+        let area = 0;
+        let ys = [];
+        let started = false;
+        const coveredY = (intervals) => {
+            if (intervals.length === 0)
+                return 0;
+            intervals.sort((a, b) => a.y1 - b.y1);
+            let total = 0;
+            let [cy1, cy2] = [intervals[0].y1, intervals[0].y2];
+            for (let i = 1; i < intervals.length; i++) {
+                const it = intervals[i];
+                if (it.y1 <= cy2) {
+                    cy2 = Math.max(cy2, it.y2);
+                }
+                else {
+                    total += cy2 - cy1;
+                    [cy1, cy2] = [it.y1, it.y2];
+                }
+            }
+            total += cy2 - cy1;
+            return total;
+        };
+        for (const e of events) {
+            if (!started) {
+                prevX = e.x;
+                started = true;
+            }
+            const dx = e.x - prevX;
+            if (dx > 0) {
+                area += coveredY(ys) * dx;
+                prevX = e.x;
+            }
+            if (e.type === 1) {
+                ys.push({ y1: e.y1, y2: e.y2 });
+            }
+            else {
+                const idx = ys.findIndex((it) => it.y1 === e.y1 && it.y2 === e.y2);
+                if (idx !== -1)
+                    ys.splice(idx, 1);
+            }
+        }
+        return area;
+    }
+    _canRunOnMonitor(monitorActor) {
+        const mode = this._settings.get_string("display-mode");
+        if (Main.overview.visible)
+            return false;
+        if (mode === "screen") {
+            return true;
+        }
+        const obscured = this._monitorObscuredCache.get(monitorActor.monitor.index) ?? false;
+        return !obscured;
+    }
+    _recomputeObscuration() {
+        const mode = this._settings.get_string("display-mode");
+        if (mode === "screen") {
+            this._monitorObscuredCache.clear();
+            return;
+        }
+        for (const ma of this.monitorActors) {
+            const wasObscured = this._monitorObscuredCache.get(ma.monitor.index) ?? false;
+            const nowObscured = this._isMonitorObscured(ma.monitor);
+            if (wasObscured !== nowObscured) {
+                //log(`Weather Effect: monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`);
+                this._monitorObscuredCache.set(ma.monitor.index, nowObscured);
+            }
+        }
     }
     _createParticle(type, monitorActor, screenWidth) {
-        const size = this._settings.get_int('particle-size');
-        const snowEmoji = this._settings.get_string('snow-emoji');
-        const rainEmoji = this._settings.get_string('rain-emoji');
+        const size = this._settings.get_int("particle-size");
+        const snowEmoji = this._settings.get_string("snow-emoji");
+        const rainEmoji = this._settings.get_string("rain-emoji");
         let particle;
-        if (type === 'snow') {
-            if (snowEmoji && snowEmoji !== '') {
+        if (type === "snow") {
+            if (snowEmoji && snowEmoji !== "") {
                 particle = new St.Label({
                     text: snowEmoji,
-                    style: `font-size: ${size}px; color: ${this._settings.get_string('snow-color')};`,
+                    style: `font-size: ${size}px; color: ${this._settings.get_string("snow-color")};`,
                     x: Math.random() * screenWidth,
                     y: -20,
                 });
             }
             else {
                 particle = new St.Widget({
-                    style: `background-color: ${this._settings.get_string('snow-color')}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`,
+                    style: `background-color: ${this._settings.get_string("snow-color")}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`,
                     x: Math.random() * screenWidth,
                     y: -20,
                 });
             }
         }
         else {
-            if (rainEmoji && rainEmoji !== '') {
+            if (rainEmoji && rainEmoji !== "") {
                 particle = new St.Label({
                     text: rainEmoji,
-                    style: `font-size: ${size}px; color: ${this._settings.get_string('rain-color')};`,
+                    style: `font-size: ${size}px; color: ${this._settings.get_string("rain-color")};`,
                     x: Math.random() * screenWidth,
                     y: -20,
                 });
             }
             else {
                 particle = new St.Widget({
-                    style: `background-color: ${this._settings.get_string('rain-color')}; width: ${size / 2}px; height: ${size * 2}px;`,
+                    style: `background-color: ${this._settings.get_string("rain-color")}; width: ${size / 2}px; height: ${size * 2}px;`,
                     x: Math.random() * screenWidth,
                     y: -20,
                 });
@@ -406,43 +620,54 @@ export default class WeatherEffectExtension extends Extension {
         return particle;
     }
     _updateParticleStyle(particle, type) {
-        const size = this._settings.get_int('particle-size');
-        const snowEmoji = this._settings.get_string('snow-emoji');
-        const rainEmoji = this._settings.get_string('rain-emoji');
-        if (type === 'snow') {
-            if (snowEmoji && snowEmoji !== '') {
+        const size = this._settings.get_int("particle-size");
+        const snowEmoji = this._settings.get_string("snow-emoji");
+        const rainEmoji = this._settings.get_string("rain-emoji");
+        if (type === "snow") {
+            if (snowEmoji && snowEmoji !== "") {
                 particle.text = snowEmoji;
-                particle.style = `font-size: ${size}px; color: ${this._settings.get_string('snow-color')};`;
+                particle.style = `font-size: ${size}px; color: ${this._settings.get_string("snow-color")};`;
             }
             else {
-                particle.style = `background-color: ${this._settings.get_string('snow-color')}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`;
+                particle.style = `background-color: ${this._settings.get_string("snow-color")}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`;
             }
         }
         else {
-            if (rainEmoji && rainEmoji !== '') {
+            if (rainEmoji && rainEmoji !== "") {
                 particle.text = rainEmoji;
-                particle.style = `font-size: ${size}px; color: ${this._settings.get_string('rain-color')};`;
+                particle.style = `font-size: ${size}px; color: ${this._settings.get_string("rain-color")};`;
             }
             else {
-                particle.style = `background-color: ${this._settings.get_string('rain-color')}; width: ${size / 2}px; height: ${size * 2}px;`;
+                particle.style = `background-color: ${this._settings.get_string("rain-color")}; width: ${size / 2}px; height: ${size * 2}px;`;
             }
         }
     }
     _animateParticles() {
-        const type = this._settings.get_string('effect-type');
-        const totalParticleCount = this._settings.get_int('particle-count');
-        const speed = this._settings.get_int('speed');
-        const baseDuration = speed === 0 ? 2000 : speed === 1 ? 1000 : 500;
-        const snowEmoji = this._settings.get_string('snow-emoji');
-        const rainEmoji = this._settings.get_string('rain-emoji');
+        const type = this._settings.get_string("effect-type");
+        const totalParticleCount = this._settings.get_int("particle-count");
+        const speed = this._settings.get_int("speed");
+        const baseDuration = speed === 0 ? 3000 : speed === 1 ? 2000 : speed === 2 ? 1000 : 500;
         const particleCountPerMonitor = Math.max(1, Math.floor(totalParticleCount / this.monitorActors.length));
         for (const monitorActor of this.monitorActors) {
+            if (!this._canRunOnMonitor(monitorActor)) {
+                if (monitorActor.particles.length > 0) {
+                    //log(`Weather Effect: Clearing ${monitorActor.particles.length} particles on monitor ${monitorActor.monitor.index} (obscured or inactive)`);
+                    monitorActor.particles.forEach((p) => {
+                        p.remove_all_transitions();
+                        p.destroy();
+                    });
+                    monitorActor.particles = [];
+                }
+                continue;
+            }
             const screenWidth = monitorActor.monitor.width;
             const screenHeight = monitorActor.monitor.height;
             while (monitorActor.particles.length > particleCountPerMonitor) {
                 const particle = monitorActor.particles.pop();
-                if (particle)
+                if (particle) {
+                    particle.remove_all_transitions();
                     particle.destroy();
+                }
             }
             if (monitorActor.particles.length < particleCountPerMonitor) {
                 const toAdd = particleCountPerMonitor - monitorActor.particles.length;
@@ -454,13 +679,35 @@ export default class WeatherEffectExtension extends Extension {
             }
             for (let i = monitorActor.particles.length - 1; i >= 0; i--) {
                 const particle = monitorActor.particles[i];
-                const isSnowEmoji = snowEmoji && particle.text === snowEmoji;
-                const isRainEmoji = rainEmoji && particle.text === rainEmoji;
-                const isSnowDefault = !snowEmoji && particle.style && particle.style.includes('border-radius');
-                const isRainDefault = !rainEmoji && particle.style && particle.style.includes('height:');
-                const needsReplace = (type === 'snow' && !isSnowEmoji && !isSnowDefault) ||
-                    (type === 'rain' && !isRainEmoji && !isRainDefault);
-                if (needsReplace) {
+                const snowEmoji = this._settings.get_string("snow-emoji");
+                const rainEmoji = this._settings.get_string("rain-emoji");
+                let isCorrectType = false;
+                if (type === "snow") {
+                    if (snowEmoji &&
+                        particle instanceof St.Label &&
+                        particle.text === snowEmoji) {
+                        isCorrectType = true;
+                    }
+                    else if (!snowEmoji &&
+                        particle instanceof St.Widget &&
+                        !(particle instanceof St.Label)) {
+                        isCorrectType = true;
+                    }
+                }
+                else {
+                    if (rainEmoji &&
+                        particle instanceof St.Label &&
+                        particle.text === rainEmoji) {
+                        isCorrectType = true;
+                    }
+                    else if (!rainEmoji &&
+                        particle instanceof St.Widget &&
+                        !(particle instanceof St.Label)) {
+                        isCorrectType = true;
+                    }
+                }
+                if (!isCorrectType) {
+                    particle.remove_all_transitions();
                     particle.destroy();
                     monitorActor.particles.splice(i, 1);
                     const newParticle = this._createParticle(type, monitorActor, screenWidth);
@@ -480,19 +727,29 @@ export default class WeatherEffectExtension extends Extension {
             onComplete: () => {
                 particle.y = -20;
                 particle.x = Math.random() * monitorActor.monitor.width;
-                const updatedType = this._settings.get_string('effect-type');
-                const updatedTotalParticleCount = this._settings.get_int('particle-count');
+                const updatedType = this._settings.get_string("effect-type");
+                const updatedTotalParticleCount = this._settings.get_int("particle-count");
                 const updatedParticleCountPerMonitor = Math.max(1, Math.floor(updatedTotalParticleCount / this.monitorActors.length));
-                const updatedSpeed = this._settings.get_int('speed');
-                const updatedBaseDuration = updatedSpeed === 0 ? 2000 : updatedSpeed === 1 ? 1000 : 500;
+                const updatedSpeed = this._settings.get_int("speed");
+                const updatedBaseDuration = updatedSpeed === 0
+                    ? 3000
+                    : updatedSpeed === 1
+                        ? 2000
+                        : updatedSpeed === 2
+                            ? 1000
+                            : 500;
                 this._updateParticleStyle(particle, updatedType);
-                const mode = this._settings.get_string('display-mode');
-                const canRun = this._indicator.toggle.checked &&
-                    (mode === 'screen' || (!Main.overview.visible && !this._isDesktopObscured()));
-                if (canRun && monitorActor.particles.length <= updatedParticleCountPerMonitor) {
+                const mode = this._settings.get_string("display-mode");
+                const canRun = this._indicator &&
+                    this._indicator.toggle &&
+                    this._indicator.toggle.checked &&
+                    (mode === "screen" || this._canRunOnMonitor(monitorActor));
+                if (canRun &&
+                    monitorActor.particles.length <= updatedParticleCountPerMonitor) {
                     this._animateSingleParticle(particle, monitorActor, screenHeight, updatedBaseDuration);
                 }
                 else {
+                    particle.remove_all_transitions();
                     particle.destroy();
                     const index = monitorActor.particles.indexOf(particle);
                     if (index !== -1)
