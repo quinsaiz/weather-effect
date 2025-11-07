@@ -148,12 +148,12 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
       title: "Rain Emoji",
       subtitle: "Choose emoji or leave default shape",
       model: new Gtk.StringList({ strings: ["Default", "💧"] }),
-      selected: ["default", "💧"].indexOf(
+      selected: ["default", "🌢"].indexOf(
         settings.get_string("rain-emoji") || "default"
       ),
     });
     rainEmojiRow.connect("notify::selected", () => {
-      const value = ["default", "💧"][rainEmojiRow.selected];
+      const value = ["default", "🌢"][rainEmojiRow.selected];
       settings.set_string("rain-emoji", value === "default" ? "" : value);
     });
     appearanceGroup.add(rainEmojiRow);

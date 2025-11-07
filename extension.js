@@ -46,7 +46,7 @@ const WeatherToggle = GObject.registerClass(class WeatherToggle extends QuickMen
             this.checked = true;
             this._updateButtons();
             this.iconName = "weather-snow-symbolic";
-            //log("Weather Effect: Snow selected");
+            log("Weather Effect: Snow selected");
         });
         const rainBox = new St.BoxLayout({
             style_class: "keyboard-brightness-level",
@@ -72,13 +72,13 @@ const WeatherToggle = GObject.registerClass(class WeatherToggle extends QuickMen
             this.checked = true;
             this._updateButtons();
             this.iconName = "weather-showers-symbolic";
-            //log("Weather Effect: Rain selected");
+            log("Weather Effect: Rain selected");
         });
         this.menu.box.add_child(this._buttonBox);
         this.connect("clicked", () => {
             this.checked = !this.checked;
             this._updateButtons();
-            //log(`Weather Effect: Toggle clicked, checked: ${this.checked}, effect-type: ${this._settings.get_string("effect-type")}`);
+            log(`Weather Effect: Toggle clicked, checked: ${this.checked}, effect-type: ${this._settings.get_string("effect-type")}`);
         });
         this._settingsHandler = this._settings.connect("changed::effect-type", () => {
             this._updateButtons();
@@ -110,13 +110,20 @@ const WeatherToggle = GObject.registerClass(class WeatherToggle extends QuickMen
     }
     vfunc_destroy() {
         if (this._settingsHandler && this._settings) {
-            try {
-                this._settings.disconnect(this._settingsHandler);
-            }
-            catch (e) {
-                // Already disconnected
-            }
+            this._settings.disconnect(this._settingsHandler);
             this._settingsHandler = null;
+        }
+        if (this._snowButtonHandler && this._snowButton) {
+            this._snowButton.disconnect(this._snowButtonHandler);
+            this._snowButtonHandler = null;
+        }
+        if (this._rainButtonHandler && this._rainButton) {
+            this._rainButton.disconnect(this._rainButtonHandler);
+            this._rainButtonHandler = null;
+        }
+        if (this._toggleHandler) {
+            this.disconnect(this._toggleHandler);
+            this._toggleHandler = null;
         }
         this._settings = null;
         this._snowButton = null;
@@ -157,10 +164,16 @@ const WeatherIndicator = GObject.registerClass(class WeatherIndicator extends Sy
             this._settings.disconnect(this._settingsHandler);
             this._settingsHandler = null;
         }
+        if (this._toggleHandler && this.toggle) {
+            this.toggle.disconnect(this._toggleHandler);
+            this._toggleHandler = null;
+        }
+        if (this.toggle) {
+            this.toggle.destroy();
+            this.toggle = null;
+        }
         this._settings = null;
-        this._snowButton = null;
-        this._rainButton = null;
-        this._buttonBox = null;
+        this._indicator = null;
         super.vfunc_destroy();
     }
 });
@@ -172,6 +185,8 @@ export default class WeatherEffectExtension extends Extension {
     _overviewHandler = null;
     _overviewHideHandler = null;
     _windowHandler = null;
+    _windowMinimizeHandler = null;
+    _windowUnminimizeHandler = null;
     _debounceTimeout = null;
     _monitorsChangedHandler = null;
     _workareasChangedHandler = null;
@@ -180,9 +195,9 @@ export default class WeatherEffectExtension extends Extension {
     _windowCreatedHandler = null;
     _monitorObscuredCache = new Map();
     enable() {
-        //log("Weather Effect: Enabling extension");
+        log("Weather Effect: Enabling extension");
         this._settings = this.getSettings();
-        //log(`Weather Effect: Initial effect-type: ${this._settings.get_string("effect-type")}`);
+        log(`Weather Effect: Initial effect-type: ${this._settings.get_string("effect-type")}`);
         this._indicator = new WeatherIndicator(this._settings);
         Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
         this.monitorActors = [];
@@ -191,27 +206,27 @@ export default class WeatherEffectExtension extends Extension {
             const mode = this._settings.get_string("display-mode");
             if (mode === "wallpaper") {
                 this._stopAnimation();
-                //log("Weather Effect: Overview shown, animation stopped");
+                log("Weather Effect: Overview shown, animation stopped");
             }
             else {
                 this._syncToggleState();
-                //log("Weather Effect: Overview shown, syncing state for screen mode");
+                log("Weather Effect: Overview shown, syncing state for screen mode");
             }
         });
         this._overviewHideHandler = Main.overview.connect("hidden", () => {
             this._recomputeObscuration();
             this._syncToggleState();
-            //log("Weather Effect: Overview hidden, syncing state");
+            log("Weather Effect: Overview hidden, syncing state");
         });
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
             this._syncToggleState();
-            //log("Weather Effect: Checked state after boot");
+            log("Weather Effect: Checked state after boot");
             return GLib.SOURCE_REMOVE;
         });
         this._indicator.toggle.connect("notify::checked", () => {
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
                 this._syncToggleState();
-                //log("Weather Effect: Toggle state changed");
+                log("Weather Effect: Toggle state changed");
                 return GLib.SOURCE_REMOVE;
             });
         });
@@ -228,10 +243,10 @@ export default class WeatherEffectExtension extends Extension {
             else {
                 this._syncToggleState();
             }
-            //log("Weather Effect: Display mode changed, actors reattached");
+            log("Weather Effect: Display mode changed, actors reattached");
         }));
         this._monitorsChangedHandler = Main.layoutManager.connect("monitors-changed", () => {
-            //log("Weather Effect: Monitors changed");
+            log("Weather Effect: Monitors changed");
             this._monitorObscuredCache.clear();
             this._destroyMonitorActors();
             this._createMonitorActors();
@@ -239,13 +254,13 @@ export default class WeatherEffectExtension extends Extension {
             this._syncToggleState();
         });
         this._workareasChangedHandler = global.display.connect("workareas-changed", () => {
-            //log("Weather Effect: Workareas changed");
+            log("Weather Effect: Workareas changed");
             this._updateMonitorActors();
             this._recomputeObscuration();
             this._syncToggleState();
         });
         this._workspaceChangedHandler = global.workspace_manager.connect("active-workspace-changed", () => {
-            //log("Weather Effect: Active workspace changed");
+            log("Weather Effect: Active workspace changed");
             const mode = this._settings.get_string("display-mode");
             if (mode === "wallpaper") {
                 for (const monitorActor of this.monitorActors) {
@@ -287,9 +302,29 @@ export default class WeatherEffectExtension extends Extension {
                 return GLib.SOURCE_REMOVE;
             });
         });
+        this._windowMinimizeHandler = global.window_manager.connect("minimize", () => {
+            if (this._debounceTimeout)
+                GLib.source_remove(this._debounceTimeout);
+            this._debounceTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                this._recomputeObscuration();
+                this._syncToggleState();
+                this._debounceTimeout = null;
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+        this._windowUnminimizeHandler = global.window_manager.connect("unminimize", () => {
+            if (this._debounceTimeout)
+                GLib.source_remove(this._debounceTimeout);
+            this._debounceTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                this._recomputeObscuration();
+                this._syncToggleState();
+                this._debounceTimeout = null;
+                return GLib.SOURCE_REMOVE;
+            });
+        });
     }
     disable() {
-        //log("Weather Effect: Disabling extension");
+        log("Weather Effect: Disabling extension");
         this._stopAnimation();
         if (this._overviewHandler) {
             Main.overview.disconnect(this._overviewHandler);
@@ -318,6 +353,14 @@ export default class WeatherEffectExtension extends Extension {
         if (this._windowHandler) {
             global.window_manager.disconnect(this._windowHandler);
             this._windowHandler = null;
+        }
+        if (this._windowMinimizeHandler) {
+            global.window_manager.disconnect(this._windowMinimizeHandler);
+            this._windowMinimizeHandler = null;
+        }
+        if (this._windowUnminimizeHandler) {
+            global.window_manager.disconnect(this._windowUnminimizeHandler);
+            this._windowUnminimizeHandler = null;
         }
         if (this._debounceTimeout) {
             GLib.source_remove(this._debounceTimeout);
@@ -431,11 +474,11 @@ export default class WeatherEffectExtension extends Extension {
         }
         const isRunning = !!this.timeoutId;
         if (shouldRun && !isRunning) {
-            //log("Weather Effect: Starting animation");
+            log("Weather Effect: Starting animation");
             this._startAnimation();
         }
         else if (!shouldRun && isRunning) {
-            //log("Weather Effect: Stopping animation");
+            log("Weather Effect: Stopping animation");
             this._stopAnimation();
         }
     }
@@ -572,7 +615,7 @@ export default class WeatherEffectExtension extends Extension {
             const wasObscured = this._monitorObscuredCache.get(ma.monitor.index) ?? false;
             const nowObscured = this._isMonitorObscured(ma.monitor);
             if (wasObscured !== nowObscured) {
-                //log(`Weather Effect: monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`);
+                log(`Weather Effect: monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`);
                 this._monitorObscuredCache.set(ma.monitor.index, nowObscured);
             }
         }
@@ -651,7 +694,7 @@ export default class WeatherEffectExtension extends Extension {
         for (const monitorActor of this.monitorActors) {
             if (!this._canRunOnMonitor(monitorActor)) {
                 if (monitorActor.particles.length > 0) {
-                    //log(`Weather Effect: Clearing ${monitorActor.particles.length} particles on monitor ${monitorActor.monitor.index} (obscured or inactive)`);
+                    log(`Weather Effect: Clearing ${monitorActor.particles.length} particles on monitor ${monitorActor.monitor.index} (obscured or inactive)`);
                     monitorActor.particles.forEach((p) => {
                         p.remove_all_transitions();
                         p.destroy();

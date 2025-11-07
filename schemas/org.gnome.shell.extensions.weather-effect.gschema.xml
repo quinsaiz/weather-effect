@@ -55,7 +55,7 @@
     <key name="rain-emoji" type="s">
       <default>""</default>
       <summary>Rain emoji</summary>
-      <description>Custom emoji for rain particles (e.g., 💧). Leave empty for default rectangular shape.</description>
+      <description>Custom emoji for rain particles (e.g., 🌢). Leave empty for default rectangular shape.</description>
     </key>
   </schema>
 </schemalist>
