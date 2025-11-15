@@ -15,6 +15,7 @@ import { PopupBaseMenuItem } from "resource:///org/gnome/shell/ui/popupMenu.js";
 type EffectType = "snow" | "rain";
 type DisplayMode = "wallpaper" | "screen";
 
+// WeatherToggle - Quick Settings Toggle
 const WeatherToggle = GObject.registerClass(
   class WeatherToggle extends QuickMenuToggle {
     private _settings: any;
@@ -33,6 +34,7 @@ const WeatherToggle = GObject.registerClass(
       });
       this._settings = settings;
 
+      this.checked = true;
       const effectType: EffectType = this._settings.get_string("effect-type");
       this.iconName =
         effectType === "snow"
@@ -160,6 +162,7 @@ const WeatherToggle = GObject.registerClass(
   }
 );
 
+// WeatherIndicator - System Indicator
 const WeatherIndicator = GObject.registerClass(
   class WeatherIndicator extends SystemIndicator {
     public toggle: InstanceType<typeof WeatherToggle>;
@@ -224,6 +227,7 @@ interface MonitorActor {
   particles: St.Widget[];
 }
 
+// WeatherEffectExtension - Main
 export default class WeatherEffectExtension extends Extension {
   private _settings!: any;
   private _indicator!: InstanceType<typeof WeatherIndicator>;
@@ -243,6 +247,7 @@ export default class WeatherEffectExtension extends Extension {
   private _monitorObscuredCache: Map<number, boolean> = new Map();
   private _toggleHandler: number | null = null;
 
+  // Lifecycle Methods
   enable() {
     log("Weather Effect: Enabling extension");
     this._settings = this.getSettings();
@@ -493,6 +498,7 @@ export default class WeatherEffectExtension extends Extension {
     this._monitorObscuredCache.clear();
   }
 
+  // Monitor Management
   private _createMonitorActors() {
     const monitors = Main.layoutManager.monitors;
     for (let i = 0; i < monitors.length; i++) {
@@ -591,6 +597,7 @@ export default class WeatherEffectExtension extends Extension {
     this.monitorActors = [];
   }
 
+  // Animation Control
   private _syncToggleState() {
     if (!this._indicator || !this._indicator.toggle) return;
     const mode: DisplayMode = this._settings.get_string("display-mode");
@@ -644,6 +651,7 @@ export default class WeatherEffectExtension extends Extension {
     }
   }
 
+  // Monitor Obscuration Detection
   private _isMonitorObscured(monitor: any): boolean {
     const activeWs = global.workspace_manager.get_active_workspace();
     const workArea = {
@@ -775,6 +783,7 @@ export default class WeatherEffectExtension extends Extension {
     }
   }
 
+  // Particle Management
   private _createParticle(
     type: EffectType,
     monitorActor: MonitorActor,
@@ -784,6 +793,9 @@ export default class WeatherEffectExtension extends Extension {
     const snowEmoji = this._settings.get_string("snow-emoji") as string;
     const rainEmoji = this._settings.get_string("rain-emoji") as string;
 
+    const safeScreenWidth = Math.max(1, screenWidth);
+    const safeX = Math.random() * safeScreenWidth;
+
     let particle: St.Widget;
     if (type === "snow") {
       if (snowEmoji && snowEmoji !== "") {
@@ -792,7 +804,7 @@ export default class WeatherEffectExtension extends Extension {
           style: `font-size: ${size}px; color: ${this._settings.get_string(
             "snow-color"
           )};`,
-          x: Math.random() * screenWidth,
+          x: safeX,
           y: -20,
         });
       } else {
@@ -800,7 +812,7 @@ export default class WeatherEffectExtension extends Extension {
           style: `background-color: ${this._settings.get_string(
             "snow-color"
           )}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`,
-          x: Math.random() * screenWidth,
+          x: safeX,
           y: -20,
         });
       }
@@ -811,7 +823,7 @@ export default class WeatherEffectExtension extends Extension {
           style: `font-size: ${size}px; color: ${this._settings.get_string(
             "rain-color"
           )};`,
-          x: Math.random() * screenWidth,
+          x: safeX,
           y: -20,
         });
       } else {
@@ -819,7 +831,7 @@ export default class WeatherEffectExtension extends Extension {
           style: `background-color: ${this._settings.get_string(
             "rain-color"
           )}; width: ${size / 2}px; height: ${size * 2}px;`,
-          x: Math.random() * screenWidth,
+          x: safeX,
           y: -20,
         });
       }
@@ -884,8 +896,13 @@ export default class WeatherEffectExtension extends Extension {
         }
         continue;
       }
-      const screenWidth = monitorActor.monitor.width;
-      const screenHeight = monitorActor.monitor.height;
+
+      const screenWidth = Math.max(1, monitorActor.monitor.width);
+      const screenHeight = Math.max(1, monitorActor.monitor.height);
+
+      if (screenWidth <= 0 || screenHeight <= 0) {
+        continue;
+      }
 
       while (monitorActor.particles.length > particleCountPerMonitor) {
         const particle = monitorActor.particles.pop();
@@ -976,6 +993,10 @@ export default class WeatherEffectExtension extends Extension {
     screenHeight: number,
     baseDuration: number
   ) {
+    if (!particle || !monitorActor || screenHeight <= 0 || baseDuration <= 0) {
+      return;
+    }
+
     const randomOffset = Math.random() * 500;
     particle.show();
     particle.ease({
@@ -983,8 +1004,13 @@ export default class WeatherEffectExtension extends Extension {
       duration: baseDuration + randomOffset,
       mode: Clutter.AnimationMode.LINEAR,
       onComplete: () => {
+        if (!particle || !monitorActor || !monitorActor.monitor) {
+          return;
+        }
+
         particle.y = -20;
-        particle.x = Math.random() * monitorActor.monitor.width;
+        const safeWidth = Math.max(1, monitorActor.monitor.width);
+        particle.x = Math.random() * safeWidth;
         const updatedType: EffectType =
           this._settings.get_string("effect-type");
         const updatedTotalParticleCount =
