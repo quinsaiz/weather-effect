@@ -22,11 +22,22 @@ const WeatherToggle = GObject.registerClass(
     private _rainButton: St.Button | null = null;
     private _buttonBox: St.BoxLayout | null = null;
     private _settingsHandler: number | null = null;
+    private _snowButtonHandler: number | null = null;
+    private _rainButtonHandler: number | null = null;
 
     constructor(settings: any) {
-      super({ title: "Weather Effect", iconName: "weather-snow-symbolic" });
+      super({
+        title: "Weather Effect",
+        iconName: "weather-snow-symbolic",
+        toggleMode: true,
+      });
       this._settings = settings;
-      this.checked = true;
+
+      const effectType: EffectType = this._settings.get_string("effect-type");
+      this.iconName =
+        effectType === "snow"
+          ? "weather-snow-symbolic"
+          : "weather-showers-symbolic";
 
       this._buttonBox = new St.BoxLayout({
         style_class: "popup-menu-item",
@@ -54,7 +65,7 @@ const WeatherToggle = GObject.registerClass(
       snowBox.add_child(snowLabel);
       this._buttonBox.add_child(snowBox);
 
-      this._snowButton.connect("clicked", () => {
+      this._snowButtonHandler = this._snowButton.connect("clicked", () => {
         this._settings.set_string("effect-type", "snow");
         this.checked = true;
         this._updateButtons();
@@ -82,7 +93,7 @@ const WeatherToggle = GObject.registerClass(
       rainBox.add_child(rainLabel);
       this._buttonBox.add_child(rainBox);
 
-      this._rainButton.connect("clicked", () => {
+      this._rainButtonHandler = this._rainButton.connect("clicked", () => {
         this._settings.set_string("effect-type", "rain");
         this.checked = true;
         this._updateButtons();
@@ -91,16 +102,6 @@ const WeatherToggle = GObject.registerClass(
       });
 
       this.menu.box.add_child(this._buttonBox);
-
-      this.connect("clicked", () => {
-        this.checked = !this.checked;
-        this._updateButtons();
-        log(
-          `Weather Effect: Toggle clicked, checked: ${
-            this.checked
-          }, effect-type: ${this._settings.get_string("effect-type")}`
-        );
-      });
 
       this._settingsHandler = this._settings.connect(
         "changed::effect-type",
@@ -135,7 +136,7 @@ const WeatherToggle = GObject.registerClass(
       }
     }
 
-    vfunc_destroy() {
+    destroy() {
       if (this._settingsHandler && this._settings) {
         this._settings.disconnect(this._settingsHandler);
         this._settingsHandler = null;
@@ -148,16 +149,13 @@ const WeatherToggle = GObject.registerClass(
         this._rainButton.disconnect(this._rainButtonHandler);
         this._rainButtonHandler = null;
       }
-      if (this._toggleHandler) {
-        this.disconnect(this._toggleHandler);
-        this._toggleHandler = null;
-      }
+
       this._settings = null;
       this._snowButton = null;
       this._rainButton = null;
       this._buttonBox = null;
 
-      super.vfunc_destroy();
+      super.destroy();
     }
   }
 );
@@ -173,6 +171,7 @@ const WeatherIndicator = GObject.registerClass(
     constructor(settings: any) {
       super();
       this._indicator = this._addIndicator();
+      this._indicator.icon_name = "weather-snow-symbolic";
       this._settings = settings;
 
       this.toggle = new WeatherToggle(settings);
@@ -192,14 +191,14 @@ const WeatherIndicator = GObject.registerClass(
       if (!this._settings || !this.toggle || !this._indicator) return;
       const effectType: EffectType = this._settings.get_string("effect-type");
       const checked = this.toggle.checked;
-      this._indicator.iconName = checked
+      this._indicator.icon_name = checked
         ? effectType === "snow"
           ? "weather-snow-symbolic"
           : "weather-showers-symbolic"
         : "weather-clear-symbolic";
     }
 
-    vfunc_destroy() {
+    destroy() {
       if (this._settingsHandler && this._settings) {
         this._settings.disconnect(this._settingsHandler);
         this._settingsHandler = null;
@@ -208,14 +207,13 @@ const WeatherIndicator = GObject.registerClass(
         this.toggle.disconnect(this._toggleHandler);
         this._toggleHandler = null;
       }
-      if (this.toggle) {
-        this.toggle.destroy();
-        this.toggle = null;
-      }
+
+      this.quickSettingsItems.forEach((item) => item.destroy());
+
       this._settings = null;
       this._indicator = null;
 
-      super.vfunc_destroy();
+      super.destroy();
     }
   }
 );
@@ -243,6 +241,7 @@ export default class WeatherEffectExtension extends Extension {
   private _workspaceChangedHandler: number | null = null;
   private _windowCreatedHandler: number | null = null;
   private _monitorObscuredCache: Map<number, boolean> = new Map();
+  private _toggleHandler: number | null = null;
 
   enable() {
     log("Weather Effect: Enabling extension");
@@ -281,13 +280,16 @@ export default class WeatherEffectExtension extends Extension {
       return GLib.SOURCE_REMOVE;
     });
 
-    this._indicator.toggle.connect("notify::checked", () => {
-      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
-        this._syncToggleState();
-        log("Weather Effect: Toggle state changed");
-        return GLib.SOURCE_REMOVE;
-      });
-    });
+    this._toggleHandler = this._indicator.toggle.connect(
+      "notify::checked",
+      () => {
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+          this._syncToggleState();
+          log("Weather Effect: Toggle state changed");
+          return GLib.SOURCE_REMOVE;
+        });
+      }
+    );
 
     this._settingsHandlers.push(
       this._settings.connect("changed::display-mode", () => {
@@ -427,7 +429,9 @@ export default class WeatherEffectExtension extends Extension {
 
   disable() {
     log("Weather Effect: Disabling extension");
+
     this._stopAnimation();
+
     if (this._overviewHandler) {
       Main.overview.disconnect(this._overviewHandler);
       this._overviewHandler = null;
@@ -468,15 +472,25 @@ export default class WeatherEffectExtension extends Extension {
       GLib.source_remove(this._debounceTimeout);
       this._debounceTimeout = null;
     }
+
+    if (this._toggleHandler && this._indicator && this._indicator.toggle) {
+      this._indicator.toggle.disconnect(this._toggleHandler);
+      this._toggleHandler = null;
+    }
+
     this._settingsHandlers.forEach((id) => this._settings.disconnect(id));
     this._settingsHandlers = [];
+
+    this._destroyMonitorActors();
 
     if (this._indicator) {
       this._indicator.destroy();
       this._indicator = null;
     }
 
-    this._destroyMonitorActors();
+    this._settings = null;
+
+    this._monitorObscuredCache.clear();
   }
 
   private _createMonitorActors() {
