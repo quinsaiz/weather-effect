@@ -12,6 +12,11 @@ import {
 } from "resource:///org/gnome/shell/ui/quickSettings.js";
 import { PopupBaseMenuItem } from "resource:///org/gnome/shell/ui/popupMenu.js";
 
+const DEBUG = false;
+const logDebug = (msg: string) => {
+  if (DEBUG) log(`[Weather Effect] ${msg}`);
+};
+
 type EffectType = "snow" | "rain";
 type DisplayMode = "wallpaper" | "screen";
 
@@ -72,7 +77,7 @@ const WeatherToggle = GObject.registerClass(
         this.checked = true;
         this._updateButtons();
         this.iconName = "weather-snow-symbolic";
-        log("Weather Effect: Snow selected");
+        logDebug("Snow selected");
       });
 
       const rainBox = new St.BoxLayout({
@@ -100,7 +105,7 @@ const WeatherToggle = GObject.registerClass(
         this.checked = true;
         this._updateButtons();
         this.iconName = "weather-showers-symbolic";
-        log("Weather Effect: Rain selected");
+        logDebug("Rain selected");
       });
 
       this.menu.box.add_child(this._buttonBox);
@@ -249,12 +254,10 @@ export default class WeatherEffectExtension extends Extension {
 
   // Lifecycle Methods
   enable() {
-    log("Weather Effect: Enabling extension");
+    logDebug("Enabling extension");
     this._settings = this.getSettings();
-    log(
-      `Weather Effect: Initial effect-type: ${this._settings.get_string(
-        "effect-type"
-      )}`
+    logDebug(
+      `Initial effect-type: ${this._settings.get_string("effect-type")}`
     );
 
     this._indicator = new WeatherIndicator(this._settings);
@@ -267,21 +270,21 @@ export default class WeatherEffectExtension extends Extension {
       const mode: DisplayMode = this._settings.get_string("display-mode");
       if (mode === "wallpaper") {
         this._stopAnimation();
-        log("Weather Effect: Overview shown, animation stopped");
+        logDebug("Overview shown, animation stopped");
       } else {
         this._syncToggleState();
-        log("Weather Effect: Overview shown, syncing state for screen mode");
+        logDebug("Overview shown, syncing state for screen mode");
       }
     });
     this._overviewHideHandler = Main.overview.connect("hidden", () => {
       this._recomputeObscuration();
       this._syncToggleState();
-      log("Weather Effect: Overview hidden, syncing state");
+      logDebug("Overview hidden, syncing state");
     });
 
     GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
       this._syncToggleState();
-      log("Weather Effect: Checked state after boot");
+      logDebug("Checked state after boot");
       return GLib.SOURCE_REMOVE;
     });
 
@@ -290,7 +293,7 @@ export default class WeatherEffectExtension extends Extension {
       () => {
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
           this._syncToggleState();
-          log("Weather Effect: Toggle state changed");
+          logDebug("Toggle state changed");
           return GLib.SOURCE_REMOVE;
         });
       }
@@ -309,14 +312,14 @@ export default class WeatherEffectExtension extends Extension {
         } else {
           this._syncToggleState();
         }
-        log("Weather Effect: Display mode changed, actors reattached");
+        logDebug("Display mode changed, actors reattached");
       })
     );
 
     this._monitorsChangedHandler = Main.layoutManager.connect(
       "monitors-changed",
       () => {
-        log("Weather Effect: Monitors changed");
+        logDebug("Monitors changed");
         this._monitorObscuredCache.clear();
         this._destroyMonitorActors();
         this._createMonitorActors();
@@ -327,7 +330,7 @@ export default class WeatherEffectExtension extends Extension {
     this._workareasChangedHandler = global.display.connect(
       "workareas-changed",
       () => {
-        log("Weather Effect: Workareas changed");
+        logDebug("Workareas changed");
         this._updateMonitorActors();
         this._recomputeObscuration();
         this._syncToggleState();
@@ -337,7 +340,7 @@ export default class WeatherEffectExtension extends Extension {
     this._workspaceChangedHandler = global.workspace_manager.connect(
       "active-workspace-changed",
       () => {
-        log("Weather Effect: Active workspace changed");
+        logDebug("Active workspace changed");
         const mode: DisplayMode = this._settings.get_string("display-mode");
 
         if (mode === "wallpaper") {
@@ -433,7 +436,7 @@ export default class WeatherEffectExtension extends Extension {
   }
 
   disable() {
-    log("Weather Effect: Disabling extension");
+    logDebug("Disabling extension");
 
     this._stopAnimation();
 
@@ -617,10 +620,10 @@ export default class WeatherEffectExtension extends Extension {
     const isRunning = !!this.timeoutId;
 
     if (shouldRun && !isRunning) {
-      log("Weather Effect: Starting animation");
+      logDebug("Starting animation");
       this._startAnimation();
     } else if (!shouldRun && isRunning) {
-      log("Weather Effect: Stopping animation");
+      logDebug("Stopping animation");
       this._stopAnimation();
     }
   }
@@ -775,8 +778,8 @@ export default class WeatherEffectExtension extends Extension {
         this._monitorObscuredCache.get(ma.monitor.index) ?? false;
       const nowObscured = this._isMonitorObscured(ma.monitor);
       if (wasObscured !== nowObscured) {
-        log(
-          `Weather Effect: monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`
+        logDebug(
+          `monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`
         );
         this._monitorObscuredCache.set(ma.monitor.index, nowObscured);
       }
@@ -885,8 +888,8 @@ export default class WeatherEffectExtension extends Extension {
     for (const monitorActor of this.monitorActors) {
       if (!this._canRunOnMonitor(monitorActor)) {
         if (monitorActor.particles.length > 0) {
-          log(
-            `Weather Effect: Clearing ${monitorActor.particles.length} particles on monitor ${monitorActor.monitor.index} (obscured or inactive)`
+          logDebug(
+            `Clearing ${monitorActor.particles.length} particles on monitor ${monitorActor.monitor.index} (obscured or inactive)`
           );
           monitorActor.particles.forEach((p) => {
             p.remove_all_transitions();
