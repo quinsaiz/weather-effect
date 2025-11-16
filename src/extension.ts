@@ -272,8 +272,7 @@ export default class WeatherEffectExtension extends Extension {
         this._stopAnimation();
         logDebug("Overview shown, animation stopped");
       } else {
-        this._syncToggleState();
-        logDebug("Overview shown, syncing state for screen mode");
+        logDebug("Overview shown, continuing animation in screen mode");
       }
     });
     this._overviewHideHandler = Main.overview.connect("hidden", () => {
@@ -313,6 +312,14 @@ export default class WeatherEffectExtension extends Extension {
           this._syncToggleState();
         }
         logDebug("Display mode changed, actors reattached");
+      })
+    );
+
+    this._settingsHandlers.push(
+      this._settings.connect("changed::pause-on-fullscreen", () => {
+        this._recomputeObscuration();
+        this._syncToggleState();
+        logDebug("Pause on fullscreen setting changed");
       })
     );
 
@@ -706,11 +713,13 @@ export default class WeatherEffectExtension extends Extension {
     rects: { x1: number; y1: number; x2: number; y2: number }[]
   ): number {
     const events: { x: number; y1: number; y2: number; type: number }[] = [];
+
     for (const r of rects) {
       events.push({ x: r.x1, y1: r.y1, y2: r.y2, type: 1 });
       events.push({ x: r.x2, y1: r.y1, y2: r.y2, type: -1 });
     }
     events.sort((a, b) => a.x - b.x);
+
     let prevX = 0;
     let area = 0;
     let ys: { y1: number; y2: number }[] = [];
@@ -739,11 +748,13 @@ export default class WeatherEffectExtension extends Extension {
         prevX = e.x;
         started = true;
       }
+
       const dx = e.x - prevX;
       if (dx > 0) {
         area += coveredY(ys) * dx;
         prevX = e.x;
       }
+
       if (e.type === 1) {
         ys.push({ y1: e.y1, y2: e.y2 });
       } else {
@@ -756,11 +767,32 @@ export default class WeatherEffectExtension extends Extension {
 
   private _canRunOnMonitor(monitorActor: MonitorActor): boolean {
     const mode: DisplayMode = this._settings.get_string("display-mode");
-    if (Main.overview.visible) return false;
 
     if (mode === "screen") {
+      const activeWs = global.workspace_manager.get_active_workspace();
+
+      const windows = global
+        .get_window_actors()
+        .map((actor: any) => actor.meta_window as Meta.Window)
+        .filter(
+          (w) =>
+            !w.minimized &&
+            w.get_workspace() === activeWs &&
+            w.get_monitor() === monitorActor.monitor.index &&
+            w.get_window_type() === Meta.WindowType.NORMAL
+        );
+
+      const pauseOnFullscreen = this._settings.get_boolean(
+        "pause-on-fullscreen"
+      );
+      if (pauseOnFullscreen && windows.some((w) => w.is_fullscreen())) {
+        return false;
+      }
+
       return true;
     }
+
+    if (Main.overview.visible) return false;
 
     const obscured =
       this._monitorObscuredCache.get(monitorActor.monitor.index) ?? false;
@@ -769,14 +801,17 @@ export default class WeatherEffectExtension extends Extension {
 
   private _recomputeObscuration() {
     const mode: DisplayMode = this._settings.get_string("display-mode");
+
     if (mode === "screen") {
       this._monitorObscuredCache.clear();
       return;
     }
+
     for (const ma of this.monitorActors) {
       const wasObscured =
         this._monitorObscuredCache.get(ma.monitor.index) ?? false;
       const nowObscured = this._isMonitorObscured(ma.monitor);
+
       if (wasObscured !== nowObscured) {
         logDebug(
           `monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`

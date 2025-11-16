@@ -32,6 +32,15 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
             settings.set_string("display-mode", modeRow.selected === 0 ? "wallpaper" : "screen");
         });
         generalGroup.add(modeRow);
+        const pauseRow = new Adw.SwitchRow({
+            title: "Pause on Fullscreen",
+            subtitle: "When ON and in Screen mode, pause animation on fullscreen windows",
+            active: settings.get_boolean("pause-on-fullscreen"),
+        });
+        pauseRow.connect("notify::active", (row) => {
+            settings.set_boolean("pause-on-fullscreen", row.active);
+        });
+        generalGroup.add(pauseRow);
         const particlesPage = new Adw.PreferencesPage({
             title: "Particles",
             icon_name: "emoji-symbols-symbolic",

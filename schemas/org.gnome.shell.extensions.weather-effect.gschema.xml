@@ -19,6 +19,11 @@
       <summary>Effect type</summary>
       <description>Select the weather effect: snow or rain.</description>
     </key>
+    <key name="pause-on-fullscreen" type="b">
+      <default>true</default>
+      <summary>Pause on fullscreen</summary>
+      <description>When enabled and in Screen display mode, pause animation on monitors that have a fullscreen window.</description>
+    </key>
     <key name="particle-count" type="i">
       <default>10</default>
       <range min="5" max="50"/>

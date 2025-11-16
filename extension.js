@@ -7,7 +7,7 @@ import Meta from "gi://Meta";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
 import { QuickMenuToggle, SystemIndicator, } from "resource:///org/gnome/shell/ui/quickSettings.js";
-const DEBUG = false;
+const DEBUG = true;
 const logDebug = (msg) => {
     if (DEBUG)
         log(`[Weather Effect] ${msg}`);
@@ -219,8 +219,8 @@ export default class WeatherEffectExtension extends Extension {
                 logDebug("Overview shown, animation stopped");
             }
             else {
-                this._syncToggleState();
-                logDebug("Overview shown, syncing state for screen mode");
+                // В screen режимі не зупиняємо анімацію в overview
+                logDebug("Overview shown, continuing animation in screen mode");
             }
         });
         this._overviewHideHandler = Main.overview.connect("hidden", () => {
@@ -254,6 +254,11 @@ export default class WeatherEffectExtension extends Extension {
                 this._syncToggleState();
             }
             logDebug("Display mode changed, actors reattached");
+        }));
+        this._settingsHandlers.push(this._settings.connect("changed::pause-on-fullscreen", () => {
+            this._recomputeObscuration();
+            this._syncToggleState();
+            logDebug("Pause on fullscreen setting changed");
         }));
         this._monitorsChangedHandler = Main.layoutManager.connect("monitors-changed", () => {
             logDebug("Monitors changed");
@@ -616,11 +621,27 @@ export default class WeatherEffectExtension extends Extension {
     }
     _canRunOnMonitor(monitorActor) {
         const mode = this._settings.get_string("display-mode");
-        if (Main.overview.visible)
-            return false;
         if (mode === "screen") {
+            // В screen режимі анімація працює тільки на активному workspace
+            const activeWs = global.workspace_manager.get_active_workspace();
+            // Отримуємо список вікон на активному workspace для даного монітора
+            const windows = global
+                .get_window_actors()
+                .map((actor) => actor.meta_window)
+                .filter((w) => !w.minimized &&
+                w.get_workspace() === activeWs &&
+                w.get_monitor() === monitorActor.monitor.index &&
+                w.get_window_type() === Meta.WindowType.NORMAL);
+            // Якщо увімкнено паузу на fullscreen, перевіряємо наявність fullscreen вікон
+            const pauseOnFullscreen = this._settings.get_boolean("pause-on-fullscreen");
+            if (pauseOnFullscreen && windows.some((w) => w.is_fullscreen())) {
+                return false;
+            }
             return true;
         }
+        // В wallpaper режимі зупиняємо в overview
+        if (Main.overview.visible)
+            return false;
         const obscured = this._monitorObscuredCache.get(monitorActor.monitor.index) ?? false;
         return !obscured;
     }
