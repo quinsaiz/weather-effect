@@ -7,7 +7,7 @@ import Meta from "gi://Meta";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
 import { QuickMenuToggle, SystemIndicator, } from "resource:///org/gnome/shell/ui/quickSettings.js";
-const DEBUG = true;
+const DEBUG = false;
 const logDebug = (msg) => {
     if (DEBUG)
         log(`[Weather Effect] ${msg}`);
@@ -219,7 +219,6 @@ export default class WeatherEffectExtension extends Extension {
                 logDebug("Overview shown, animation stopped");
             }
             else {
-                // В screen режимі не зупиняємо анімацію в overview
                 logDebug("Overview shown, continuing animation in screen mode");
             }
         });
@@ -622,9 +621,7 @@ export default class WeatherEffectExtension extends Extension {
     _canRunOnMonitor(monitorActor) {
         const mode = this._settings.get_string("display-mode");
         if (mode === "screen") {
-            // В screen режимі анімація працює тільки на активному workspace
             const activeWs = global.workspace_manager.get_active_workspace();
-            // Отримуємо список вікон на активному workspace для даного монітора
             const windows = global
                 .get_window_actors()
                 .map((actor) => actor.meta_window)
@@ -632,14 +629,12 @@ export default class WeatherEffectExtension extends Extension {
                 w.get_workspace() === activeWs &&
                 w.get_monitor() === monitorActor.monitor.index &&
                 w.get_window_type() === Meta.WindowType.NORMAL);
-            // Якщо увімкнено паузу на fullscreen, перевіряємо наявність fullscreen вікон
             const pauseOnFullscreen = this._settings.get_boolean("pause-on-fullscreen");
             if (pauseOnFullscreen && windows.some((w) => w.is_fullscreen())) {
                 return false;
             }
             return true;
         }
-        // В wallpaper режимі зупиняємо в overview
         if (Main.overview.visible)
             return false;
         const obscured = this._monitorObscuredCache.get(monitorActor.monitor.index) ?? false;

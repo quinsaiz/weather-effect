@@ -3,7 +3,7 @@
 <p align="center">
     <img src="https://img.shields.io/badge/GNOME-Shell-blue?style=for-the-badge&logo=gnome" alt="GNOME Shell"/>
     <img src="https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge" alt="License"/>
-    <img src="https://img.shields.io/badge/Version-1.0-orange?style=for-the-badge" alt="Version"/>
+    <img src="https://img.shields.io/badge/Version-1.2-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 ## Description
@@ -14,7 +14,7 @@ Weather Effect is a GNOME Shell extension that adds beautiful animated weather e
 
 - ❄️ **Snow Effect**: Beautiful animated snowflakes falling on your desktop
 - 🌧️ **Rain Effect**: Realistic rain animation with customizable particles
-- **Display Modes**: 
+- **Display Modes**:
   - **Wallpaper Mode**: Effects only on desktop wallpaper background
   - **Screen Mode**: Full-screen overlay that works even in overview
 - **Customizable Settings**:
@@ -37,17 +37,20 @@ Weather Effect is a GNOME Shell extension that adds beautiful animated weather e
 ### Quick Installation
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/quinsaiz/weather-effect.git
    cd weather-effect
    ```
 
 2. **Make the install script executable:**
+
    ```bash
    chmod +x install.sh
    ```
 
 3. **Run the installation script:**
+
    ```bash
    ./install.sh
    ```
@@ -69,16 +72,19 @@ If you want to build the extension from source code, follow these steps:
 - **glib-compile-schemas** (usually comes with GNOME development packages)
 
 On Ubuntu/Debian:
+
 ```bash
 sudo apt install nodejs npm gir1.2-glib-2.0
 ```
 
 On Fedora:
+
 ```bash
 sudo dnf install nodejs npm glib2-devel
 ```
 
 On Arch:
+
 ```bash
 sudo pacman -S nodejs npm glib2
 ```
@@ -86,30 +92,29 @@ sudo pacman -S nodejs npm glib2
 ### Build Steps
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/quinsaiz/weather-effect.git
    cd weather-effect
    ```
 
 2. **Install dependencies:**
+
    ```bash
-   npm install
+   npm i
    ```
 
 3. **Build the extension:**
+
    ```bash
    npm run build
    ```
 
    This will:
-   - Compile TypeScript files to JavaScript
-   - Copy compiled files to project root
-   - Compile GNOME settings schemas
 
-4. **Install the extension:**
-   ```bash
-   ./install.sh
-   ```
+   - Compile TypeScript files to JavaScript
+   - Compile GNOME settings schemas
+   - Copy compiled files to gnome extensions folder
 
 ### Development Mode
 
@@ -170,6 +175,7 @@ The extension can be configured through the GNOME Extensions app settings:
 ## Author
 
 ### quinsaiz
+
 GitHub: https://github.com/quinsaiz
 
 ## License
