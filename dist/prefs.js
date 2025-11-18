@@ -4,7 +4,7 @@ import Gtk from "gi://Gtk";
 import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 export default class WeatherEffectPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
-        const settings = this.getSettings("org.gnome.shell.extensions.weather-effect");
+        const settings = this.getSettings();
         const generalPage = new Adw.PreferencesPage({
             title: "General",
             icon_name: "preferences-system-symbolic",
