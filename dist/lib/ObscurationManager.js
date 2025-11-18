@@ -89,7 +89,7 @@ export class ObscurationManager {
             const wasObscured = this.monitorObscuredCache.get(ma.monitor.index) ?? false;
             const nowObscured = this.isMonitorObscured(ma.monitor);
             if (wasObscured !== nowObscured) {
-                logDebug(`monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`);
+                logDebug(`Monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`);
                 this.monitorObscuredCache.set(ma.monitor.index, nowObscured);
             }
         }

@@ -40,7 +40,7 @@ Weather Effect is a GNOME Shell extension that adds beautiful animated weather e
 
    ```bash
    git clone https://github.com/quinsaiz/weather-effect.git
-   cd weather-effect
+   cd weather-effect/scripts
    ```
 
 2. **Make the install script executable:**
@@ -143,18 +143,30 @@ This will watch for file changes and automatically rebuild the extension.
 weather-effect/
 │
 ├── src/
-│   ├── extension.ts      # Main extension code (TypeScript)
-│   └── prefs.ts          # Preferences window code (TypeScript)
+│   ├── extension.ts           # Main extension entry point
+│   ├── metadata.json          # Extension manifest
+│   ├── prefs.ts               # Preferences window
+│   └── lib/
+│       ├── WeatherEffectController.ts  # Main orchestrator
+│       ├── UIManager.ts                # Quick Settings UI components
+│       ├── MonitorManager.ts           # Monitor actor management
+│       ├── ObscurationManager.ts       # Window obscuration detection
+│       ├── ParticleManager.ts          # Particle creation & animation
+│       ├── EventManager.ts             # Centralized signal handlers
+│       └── Debug.ts                    # Centralized logging
+│
+├── dist/                 # Compiled JavaScript output
+│   ├── extension.js
+│   ├── prefs.js
+│   └── lib/
+│       └── *.js          # Compiled library modules
 │
 ├── schemas/
-│   └── org.gnome.shell.extensions.weather-effect.gschema.xml  # Settings schema
+│   └── org.gnome.shell.extensions.weather-effect.gschema.xml
 │
-├── extension.js          # Compiled main extension (JavaScript)
-├── prefs.js              # Compiled preferences (JavaScript)
-├── metadata.json         # Extension metadata
 ├── install.sh            # Installation script
-├── package.json          # Node.js dependencies
-├── tsconfig.json         # TypeScript configuration
+├── package.json          # Dependencies & build scripts
+├── tsconfig.json         # TypeScript compiler options
 ├── LICENSE               # GPLv3 License
 └── README.md             # This file
 ```

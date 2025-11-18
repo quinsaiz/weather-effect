@@ -21,8 +21,12 @@ export class WeatherEffectController {
   private _monitorManager: MonitorManager | null = null;
   private _obscurationManager: ObscurationManager | null = null;
   private _particleManager: ParticleManager | null = null;
+  private _isEnabled: boolean = false;
 
   private timeoutId: number | null = null;
+  private _bootTimeout: number | null = null;
+  private _toggleTimeout: number | null = null;
+  private _displayModeTimeout: number | null = null;
   private _overviewHandler: number | null = null;
   private _overviewHideHandler: number | null = null;
   private _windowHandler: number | null = null;
@@ -45,6 +49,7 @@ export class WeatherEffectController {
    */
   enable() {
     logDebug("Enabling extension");
+    this._isEnabled = true;
 
     // Initialize managers
     this._monitorManager = new MonitorManager(this._settings);
@@ -67,10 +72,11 @@ export class WeatherEffectController {
     // Set up event handlers
     this._setupEventHandlers();
 
-    // Sync state
-    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+    // Sync state after boot
+    this._bootTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
       this._syncToggleState();
       logDebug("Checked state after boot");
+      this._bootTimeout = null;
       return GLib.SOURCE_REMOVE;
     });
   }
@@ -80,9 +86,27 @@ export class WeatherEffectController {
    */
   disable() {
     logDebug("Disabling extension");
+    this._isEnabled = false;
 
+    // Remove all timeouts
+    if (this._bootTimeout) {
+      GLib.source_remove(this._bootTimeout);
+      this._bootTimeout = null;
+    }
+    if (this._toggleTimeout) {
+      GLib.source_remove(this._toggleTimeout);
+      this._toggleTimeout = null;
+    }
+    if (this._displayModeTimeout) {
+      GLib.source_remove(this._displayModeTimeout);
+      this._displayModeTimeout = null;
+    }
     this._stopAnimation();
     this._disconnectAllHandlers();
+
+    // Destroy UI and managers
+    this._indicator?.destroy();
+    this._indicator = null;
 
     this._monitorManager?.destroy();
     this._monitorManager = null;
@@ -91,9 +115,6 @@ export class WeatherEffectController {
     this._obscurationManager = null;
 
     this._particleManager = null;
-
-    this._indicator?.destroy();
-    this._indicator = null;
 
     this._settings = null;
   }
@@ -121,11 +142,17 @@ export class WeatherEffectController {
     this._toggleHandler = this._indicator.toggle.connect(
       "notify::checked",
       () => {
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
-          this._syncToggleState();
-          logDebug("Toggle state changed");
-          return GLib.SOURCE_REMOVE;
-        });
+        if (this._toggleTimeout) GLib.source_remove(this._toggleTimeout);
+        this._toggleTimeout = GLib.timeout_add(
+          GLib.PRIORITY_DEFAULT,
+          50,
+          () => {
+            this._syncToggleState();
+            logDebug("Toggle state changed");
+            this._toggleTimeout = null;
+            return GLib.SOURCE_REMOVE;
+          }
+        );
       }
     );
 
@@ -136,10 +163,17 @@ export class WeatherEffectController {
         this._stopAnimation();
         this._monitorManager?.attachMonitorActors();
         if (wasRunning) {
-          GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
-            this._syncToggleState();
-            return GLib.SOURCE_REMOVE;
-          });
+          if (this._displayModeTimeout)
+            GLib.source_remove(this._displayModeTimeout);
+          this._displayModeTimeout = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            100,
+            () => {
+              this._syncToggleState();
+              this._displayModeTimeout = null;
+              return GLib.SOURCE_REMOVE;
+            }
+          );
         } else {
           this._syncToggleState();
         }
@@ -265,6 +299,14 @@ export class WeatherEffectController {
       GLib.source_remove(this._debounceTimeout);
       this._debounceTimeout = null;
     }
+    if (this._toggleTimeout) {
+      GLib.source_remove(this._toggleTimeout);
+      this._toggleTimeout = null;
+    }
+    if (this._displayModeTimeout) {
+      GLib.source_remove(this._displayModeTimeout);
+      this._displayModeTimeout = null;
+    }
 
     if (this._toggleHandler && this._indicator?.toggle) {
       this._indicator.toggle.disconnect(this._toggleHandler);
@@ -292,7 +334,8 @@ export class WeatherEffectController {
    * Sync toggle state
    */
   private _syncToggleState() {
-    if (!this._indicator?.toggle || !this._monitorManager) return;
+    if (!this._isEnabled || !this._indicator?.toggle || !this._monitorManager)
+      return;
 
     const mode: DisplayMode = this._settings.get_string("display-mode");
     let shouldRun = false;
@@ -361,7 +404,12 @@ export class WeatherEffectController {
    * Can run on monitor
    */
   private _canRunOnMonitor(monitorActor: MonitorActor): boolean {
-    if (!this._obscurationManager || !this._indicator?.toggle) return false;
+    if (
+      !this._isEnabled ||
+      !this._obscurationManager ||
+      !this._indicator?.toggle
+    )
+      return false;
     return this._obscurationManager.canRunOnMonitor(
       monitorActor,
       this._indicator.toggle,
@@ -373,7 +421,8 @@ export class WeatherEffectController {
    * Animate all particles
    */
   private _animateParticles() {
-    if (!this._monitorManager || !this._particleManager) return;
+    if (!this._isEnabled || !this._monitorManager || !this._particleManager)
+      return;
 
     const type: EffectType = this._settings.get_string("effect-type");
     const totalParticleCount = this._settings.get_int("particle-count");
@@ -464,11 +513,13 @@ export class WeatherEffectController {
     screenHeight: number,
     baseDuration: number
   ) {
+    if (!this._isEnabled) return;
     if (
       !particle ||
       !monitorActor ||
       !this._monitorManager ||
-      !this._particleManager
+      !this._particleManager ||
+      !particle.get_parent()
     ) {
       return;
     }
