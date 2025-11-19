@@ -55,6 +55,12 @@ export class ObscurationManager {
      * Can run on monitor
      */
     canRunOnMonitor(monitorActor, toggle, isOverviewVisible) {
+        if (!toggle || typeof toggle !== "object" || toggle.is_finalized?.()) {
+            return false;
+        }
+        if (typeof toggle.checked === "undefined") {
+            return false;
+        }
         const mode = this.settings.get_string("display-mode");
         if (mode === "screen") {
             const activeWs = global.workspace_manager.get_active_workspace();

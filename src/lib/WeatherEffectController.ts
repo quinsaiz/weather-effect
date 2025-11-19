@@ -88,35 +88,12 @@ export class WeatherEffectController {
     logDebug("Disabling extension");
     this._isEnabled = false;
 
-    // Remove all timeouts
-    if (this._bootTimeout) {
-      GLib.source_remove(this._bootTimeout);
-      this._bootTimeout = null;
-    }
-    if (this._toggleTimeout) {
-      GLib.source_remove(this._toggleTimeout);
-      this._toggleTimeout = null;
-    }
-    if (this._displayModeTimeout) {
-      GLib.source_remove(this._displayModeTimeout);
-      this._displayModeTimeout = null;
-    }
+    this._stopAllTimeouts();
+
     this._stopAnimation();
     this._disconnectAllHandlers();
 
-    // Destroy UI and managers
-    this._indicator?.destroy();
-    this._indicator = null;
-
-    this._monitorManager?.destroy();
-    this._monitorManager = null;
-
-    this._obscurationManager?.clear();
-    this._obscurationManager = null;
-
-    this._particleManager = null;
-
-    this._settings = null;
+    this._destroyUIAndManagers();
   }
 
   /**
@@ -256,65 +233,143 @@ export class WeatherEffectController {
   }
 
   /**
+   * Stop all timeouts
+   */
+  private _stopAllTimeouts() {
+    const timeouts = [
+      this._bootTimeout,
+      this._toggleTimeout,
+      this._displayModeTimeout,
+      this._debounceTimeout,
+    ];
+
+    timeouts.forEach((timeout) => {
+      if (timeout) {
+        GLib.source_remove(timeout);
+      }
+    });
+
+    this._bootTimeout = null;
+    this._toggleTimeout = null;
+    this._displayModeTimeout = null;
+    this._debounceTimeout = null;
+  }
+
+  /**
    * Disconnect all handlers
    */
   private _disconnectAllHandlers() {
-    if (this._overviewHandler) {
-      Main.overview.disconnect(this._overviewHandler);
-      this._overviewHandler = null;
-    }
-    if (this._overviewHideHandler) {
-      Main.overview.disconnect(this._overviewHideHandler);
-      this._overviewHideHandler = null;
-    }
-    if (this._monitorsChangedHandler) {
-      Main.layoutManager.disconnect(this._monitorsChangedHandler);
-      this._monitorsChangedHandler = null;
-    }
-    if (this._workareasChangedHandler) {
-      global.display.disconnect(this._workareasChangedHandler);
-      this._workareasChangedHandler = null;
-    }
-    if (this._workspaceChangedHandler) {
-      global.workspace_manager.disconnect(this._workspaceChangedHandler);
-      this._workspaceChangedHandler = null;
-    }
-    if (this._windowCreatedHandler) {
-      global.display.disconnect(this._windowCreatedHandler);
-      this._windowCreatedHandler = null;
-    }
-    if (this._windowHandler) {
-      global.window_manager.disconnect(this._windowHandler);
-      this._windowHandler = null;
-    }
-    if (this._windowMinimizeHandler) {
-      global.window_manager.disconnect(this._windowMinimizeHandler);
-      this._windowMinimizeHandler = null;
-    }
-    if (this._windowUnminimizeHandler) {
-      global.window_manager.disconnect(this._windowUnminimizeHandler);
-      this._windowUnminimizeHandler = null;
-    }
-    if (this._debounceTimeout) {
-      GLib.source_remove(this._debounceTimeout);
-      this._debounceTimeout = null;
-    }
-    if (this._toggleTimeout) {
-      GLib.source_remove(this._toggleTimeout);
-      this._toggleTimeout = null;
-    }
-    if (this._displayModeTimeout) {
-      GLib.source_remove(this._displayModeTimeout);
-      this._displayModeTimeout = null;
-    }
+    logDebug("Disconnecting all handlers");
 
     if (this._toggleHandler && this._indicator?.toggle) {
-      this._indicator.toggle.disconnect(this._toggleHandler);
+      try {
+        this._indicator.toggle.disconnect(this._toggleHandler);
+      } catch (e) {
+        logDebug("Toggle handler already disconnected");
+      }
       this._toggleHandler = null;
     }
 
-    this._settingsHandlers.forEach((id) => this._settings.disconnect(id));
+    const handlers = [
+      { handler: this._overviewHandler, obj: Main.overview, name: "overview" },
+      {
+        handler: this._overviewHideHandler,
+        obj: Main.overview,
+        name: "overviewHide",
+      },
+      {
+        handler: this._monitorsChangedHandler,
+        obj: Main.layoutManager,
+        name: "monitorsChanged",
+      },
+      {
+        handler: this._workareasChangedHandler,
+        obj: global.display,
+        name: "workareasChanged",
+      },
+      {
+        handler: this._workspaceChangedHandler,
+        obj: global.workspace_manager,
+        name: "workspaceChanged",
+      },
+      {
+        handler: this._windowCreatedHandler,
+        obj: global.display,
+        name: "windowCreated",
+      },
+      {
+        handler: this._windowHandler,
+        obj: global.window_manager,
+        name: "windowHandler",
+      },
+      {
+        handler: this._windowMinimizeHandler,
+        obj: global.window_manager,
+        name: "windowMinimize",
+      },
+      {
+        handler: this._windowUnminimizeHandler,
+        obj: global.window_manager,
+        name: "windowUnminimize",
+      },
+    ];
+
+    handlers.forEach(({ handler, obj, name }) => {
+      if (handler && obj) {
+        try {
+          obj.disconnect(handler);
+          logDebug(`Disconnected handler: ${name}`);
+        } catch (e) {
+          logDebug(`Handler ${name} already disconnected`);
+        }
+      }
+    });
+
+    this._settingsHandlers.forEach((id) => {
+      if (this._settings) {
+        try {
+          this._settings.disconnect(id);
+        } catch (e) {
+          logDebug("Settings handler already disconnected");
+        }
+      }
+    });
     this._settingsHandlers = [];
+
+    this._overviewHandler = null;
+    this._overviewHideHandler = null;
+    this._monitorsChangedHandler = null;
+    this._workareasChangedHandler = null;
+    this._workspaceChangedHandler = null;
+    this._windowCreatedHandler = null;
+    this._windowHandler = null;
+    this._windowMinimizeHandler = null;
+    this._windowUnminimizeHandler = null;
+  }
+
+  /**
+   * Destroy UI and managers
+   */
+  private _destroyUIAndManagers() {
+    logDebug("Destroying UI and managers");
+
+    if (this._indicator) {
+      this._indicator.destroy();
+      this._indicator = null;
+    }
+
+    if (this._monitorManager) {
+      this._monitorManager.destroy();
+      this._monitorManager = null;
+    }
+
+    if (this._obscurationManager) {
+      this._obscurationManager.clear();
+      this._obscurationManager = null;
+    }
+
+    this._particleManager = null;
+    this._settings = null;
   }
 
   /**
@@ -334,8 +389,17 @@ export class WeatherEffectController {
    * Sync toggle state
    */
   private _syncToggleState() {
-    if (!this._isEnabled || !this._indicator?.toggle || !this._monitorManager)
+    if (!this._isEnabled || !this._indicator || !this._monitorManager) {
       return;
+    }
+
+    if (this._indicator.is_finalized?.()) {
+      return;
+    }
+
+    if (!this._indicator.toggle || this._indicator.toggle.is_finalized?.()) {
+      return;
+    }
 
     const mode: DisplayMode = this._settings.get_string("display-mode");
     let shouldRun = false;
@@ -410,6 +474,14 @@ export class WeatherEffectController {
       !this._indicator?.toggle
     )
       return false;
+
+    if (
+      this._indicator.toggle.is_finalized?.() ||
+      (this._indicator.toggle as any)._deleted
+    ) {
+      return false;
+    }
+
     return this._obscurationManager.canRunOnMonitor(
       monitorActor,
       this._indicator.toggle,

@@ -63,8 +63,10 @@ function install_extension() {
 
 function uninstall_extension() {
     if [ -d "$EXTENSION_DIR" ]; then
-        info "Removing extension folder: $EXTENSION_DIR"
+        info "Removing extension: $EXTENSION_UUID"
+        gnome-extensions uninstall "$EXTENSION_UUID" 2>/dev/null || error "Failed to unregister extension"
         rm -rf "$EXTENSION_DIR"
+        dconf reset -f /org/gnome/shell/extensions/weather-effect/
         success "Extension uninstalled successfully!"
     else
         error "Extension folder does not exist."

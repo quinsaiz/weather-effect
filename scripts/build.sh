@@ -17,57 +17,71 @@ DIST_DIR="$ROOT_DIR/dist"
 SRC_DIR="$ROOT_DIR/src"
 SCHEMAS_DIR="$SRC_DIR/schemas"
 RELEASE_DIR="$ROOT_DIR/build"
-
-mkdir -p "$RELEASE_DIR"
-
-TMP_PACK="$RELEASE_DIR/tmp_pack"
-rm -rf "$TMP_PACK"
-mkdir -p "$TMP_PACK"
-
-info "Copying JS files from dist..."
-cp -r "$DIST_DIR/"* "$TMP_PACK/" 2>/dev/null || error "Failed to copy JS files"
-
-info "Copying metadata.json..."
-cp "$SRC_DIR/metadata.json" "$TMP_PACK/" 2>/dev/null || error "Failed to copy metadata.json"
-
-info "Copying schemas..."
-mkdir -p "$TMP_PACK/schemas"
-if [ -d "$SCHEMAS_DIR" ]; then
-    cp -r "$SCHEMAS_DIR/"* "$TMP_PACK/schemas/" 2>/dev/null || error "Failed to copy schema files"
-fi
-
 ZIP_NAME="weather-effect@quinsaiz.github.shell-extension.zip"
-info "Packing extension..."
-if command -v gnome-extensions >/dev/null 2>&1; then
-    gnome-extensions pack "$TMP_PACK" \
-    -f \
-    -o "$RELEASE_DIR" \
-    --extra-source="lib"
-    success "Extension packed successfully: $RELEASE_DIR/$ZIP_NAME"
-else
-    error "gnome-extensions not found. Please install it."
-    exit 1
-fi
 
-INSTALL=false
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -i|--install)
-            INSTALL=true
-            shift
-            ;;
-        *)
-            echo "Usage: $0 [--install | -i]"
-            exit 1
-            ;;
-    esac
-done
+function build_extension() {
+    mkdir -p "$RELEASE_DIR"
 
-if [ "$INSTALL" = true ]; then
+    TMP_PACK="$RELEASE_DIR/tmp_pack"
+    rm -rf "$TMP_PACK"
+    mkdir -p "$TMP_PACK"
+
+    info "Copying JS files from dist..."
+    cp -r "$DIST_DIR/"* "$TMP_PACK/" 2>/dev/null || error "Failed to copy JS files"
+
+    info "Copying metadata.json..."
+    cp "$SRC_DIR/metadata.json" "$TMP_PACK/" 2>/dev/null || error "Failed to copy metadata.json"
+
+    info "Copying schemas..."
+    mkdir -p "$TMP_PACK/schemas"
+    if [ -d "$SCHEMAS_DIR" ]; then
+        cp -r "$SCHEMAS_DIR/"* "$TMP_PACK/schemas/" 2>/dev/null || error "Failed to copy schema files"
+    fi
+
+
+    info "Packing extension..."
+    if command -v gnome-extensions >/dev/null 2>&1; then
+        gnome-extensions pack "$TMP_PACK" \
+        -f \
+        -o "$RELEASE_DIR" \
+        --extra-source="lib"
+        success "Extension packed successfully: $RELEASE_DIR/$ZIP_NAME"
+    else
+        error "gnome-extensions not found. Please install it."
+        exit 1
+    fi
+
+    rm -rf "$TMP_PACK"
+}
+
+function install_extension() {
     info "Installing extension..."
-    gnome-extensions install --force "$RELEASE_DIR/$ZIP_NAME" >/dev/null 2>&1 \
+    gnome-extensions install --force "$RELEASE_DIR/$ZIP_NAME" \
         && success "Extension installed successfully! Restart GNOME Shell." \
         || error "Failed to install extension!"
-fi
+}
 
-rm -rf "$TMP_PACK"
+function uninstall_extension() {
+    info "Uninstalling extension..."
+    gnome-extensions uninstall weather-effect@quinsaiz.github \
+        && success "Extension uninstalled successfully! Restart GNOME Shell." \
+        || error "Failed to uninstall extension!"
+    dconf reset -f /org/gnome/shell/extensions/weather-effect/
+}
+
+case "$1" in
+    "" )
+        build_extension
+        ;;
+    install|-i|--install)
+        build_extension
+        install_extension
+        ;;
+    uninstall|-u|--uninstall)
+        uninstall_extension
+        ;;
+    *)
+        echo -e "${RED}Usage:${RESET} $0 [--install | -i | --uninstall | -u]"
+        exit 1
+        ;;
+esac

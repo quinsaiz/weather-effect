@@ -155,7 +155,10 @@ export const WeatherIndicator = GObject.registerClass(class WeatherIndicator ext
         this._toggleHandler = this.toggle.connect("notify::checked", () => this._updateIndicatorIcon());
     }
     _updateIndicatorIcon() {
-        if (!this._settings || !this.toggle || !this._indicator)
+        if (!this._settings ||
+            !this.toggle ||
+            !this._indicator ||
+            this.toggle.is_finalized?.())
             return;
         const effectType = this._settings.get_string("effect-type");
         const checked = this.toggle.checked;
@@ -166,6 +169,7 @@ export const WeatherIndicator = GObject.registerClass(class WeatherIndicator ext
             : "weather-clear-symbolic";
     }
     destroy() {
+        logDebug("Destroying WeatherIndicator");
         if (this._settingsHandler && this._settings) {
             this._settings.disconnect(this._settingsHandler);
             this._settingsHandler = null;
@@ -174,7 +178,11 @@ export const WeatherIndicator = GObject.registerClass(class WeatherIndicator ext
             this.toggle.disconnect(this._toggleHandler);
             this._toggleHandler = null;
         }
-        this.quickSettingsItems.forEach((item) => item.destroy());
+        if (this.toggle) {
+            this.toggle.destroy();
+            this.toggle = null;
+        }
+        this.quickSettingsItems.length = 0;
         this._settings = null;
         this._indicator = null;
         super.destroy();

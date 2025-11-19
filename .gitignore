@@ -7,3 +7,5 @@ build/
 schemas/gschemas.compiled
 
 *.zip
+
+log.txt

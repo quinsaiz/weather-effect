@@ -76,6 +76,14 @@ export class ObscurationManager {
     toggle: any,
     isOverviewVisible: boolean
   ): boolean {
+    if (!toggle || typeof toggle !== "object" || toggle.is_finalized?.()) {
+      return false;
+    }
+
+    if (typeof toggle.checked === "undefined") {
+      return false;
+    }
+
     const mode: DisplayMode = this.settings.get_string("display-mode");
 
     if (mode === "screen") {
