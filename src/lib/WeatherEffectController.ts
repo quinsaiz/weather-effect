@@ -134,37 +134,43 @@ export class WeatherEffectController {
     );
 
     // Settings
-    this._settingsHandlers.push(
-      this._settings.connect("changed::display-mode", () => {
-        const wasRunning = !!this.timeoutId;
-        this._stopAnimation();
-        this._monitorManager?.attachMonitorActors();
-        if (wasRunning) {
-          if (this._displayModeTimeout)
-            GLib.source_remove(this._displayModeTimeout);
-          this._displayModeTimeout = GLib.timeout_add(
-            GLib.PRIORITY_DEFAULT,
-            100,
-            () => {
-              this._syncToggleState();
-              this._displayModeTimeout = null;
-              return GLib.SOURCE_REMOVE;
-            }
-          );
-        } else {
-          this._syncToggleState();
-        }
-        logDebug("Display mode changed, actors reattached");
-      })
-    );
+    if (this._settings) {
+      this._settingsHandlers.push(
+        this._settings.connect("changed::display-mode", () => {
+          if (!this._isEnabled || !this._monitorManager) return;
+          const wasRunning = !!this.timeoutId;
+          this._stopAnimation();
+          this._monitorManager?.attachMonitorActors();
+          if (wasRunning) {
+            if (this._displayModeTimeout)
+              GLib.source_remove(this._displayModeTimeout);
+            this._displayModeTimeout = GLib.timeout_add(
+              GLib.PRIORITY_DEFAULT,
+              100,
+              () => {
+                this._syncToggleState();
+                this._displayModeTimeout = null;
+                return GLib.SOURCE_REMOVE;
+              }
+            );
+          } else {
+            this._syncToggleState();
+          }
+          logDebug("Display mode changed, actors reattached");
+        })
+      );
+    }
 
-    this._settingsHandlers.push(
-      this._settings.connect("changed::pause-on-fullscreen", () => {
-        this._recomputeObscuration();
-        this._syncToggleState();
-        logDebug("Pause on fullscreen setting changed");
-      })
-    );
+    if (this._settings) {
+      this._settingsHandlers.push(
+        this._settings.connect("changed::pause-on-fullscreen", () => {
+          if (!this._isEnabled) return;
+          this._recomputeObscuration();
+          this._syncToggleState();
+          logDebug("Pause on fullscreen setting changed");
+        })
+      );
+    }
 
     // Monitors
     this._monitorsChangedHandler = Main.layoutManager.connect(
@@ -326,11 +332,13 @@ export class WeatherEffectController {
     });
 
     this._settingsHandlers.forEach((id) => {
-      if (this._settings) {
+      if (this._settings && id) {
         try {
           this._settings.disconnect(id);
         } catch (e) {
-          logDebug("Settings handler already disconnected");
+          logDebug(
+            "Settings handler already disconnected / Error disconnecting"
+          );
         }
       }
     });
@@ -389,7 +397,12 @@ export class WeatherEffectController {
    * Sync toggle state
    */
   private _syncToggleState() {
-    if (!this._isEnabled || !this._indicator || !this._monitorManager) {
+    if (
+      !this._isEnabled ||
+      !this._indicator ||
+      !this._monitorManager ||
+      !this._settings
+    ) {
       return;
     }
 
@@ -432,6 +445,8 @@ export class WeatherEffectController {
   private _startAnimation() {
     if (this.timeoutId) return;
 
+    if (!this._settings) return;
+
     const mode: DisplayMode = this._settings.get_string("display-mode");
     if (mode === "wallpaper" && Main.overview.visible) return;
 
@@ -449,9 +464,24 @@ export class WeatherEffectController {
       GLib.source_remove(this.timeoutId);
       this.timeoutId = null;
     }
-    this._monitorManager?.getMonitorActors().forEach((ma) => {
-      this._monitorManager?.clearParticles(ma);
-    });
+    if (this._monitorManager) {
+      const monitorActors = this._monitorManager.getMonitorActors();
+      for (const ma of monitorActors) {
+        if (ma) {
+          // Stop all particle animations before clearing
+          for (const particle of ma.particles) {
+            if (particle && !particle.is_finalized?.()) {
+              try {
+                particle.remove_all_transitions();
+              } catch (e) {
+                // Transition already removed
+              }
+            }
+          }
+          this._monitorManager.clearParticles(ma);
+        }
+      }
+    }
   }
 
   /**
@@ -493,7 +523,12 @@ export class WeatherEffectController {
    * Animate all particles
    */
   private _animateParticles() {
-    if (!this._isEnabled || !this._monitorManager || !this._particleManager)
+    if (
+      !this._isEnabled ||
+      !this._monitorManager ||
+      !this._particleManager ||
+      !this._settings
+    )
       return;
 
     const type: EffectType = this._settings.get_string("effect-type");
@@ -523,12 +558,21 @@ export class WeatherEffectController {
 
       if (screenWidth <= 0 || screenHeight <= 0) continue;
 
+      // Ensure particles array exists
+      if (!monitorActor.particles) {
+        monitorActor.particles = [];
+      }
+
       // Remove excess particles
       while (monitorActor.particles.length > particleCountPerMonitor) {
         const particle = monitorActor.particles.pop();
-        if (particle) {
-          particle.remove_all_transitions();
-          particle.destroy();
+        if (particle && !particle.is_finalized?.()) {
+          try {
+            particle.remove_all_transitions();
+            particle.destroy();
+          } catch (e) {
+            // Particle already destroyed
+          }
         }
       }
 
@@ -536,41 +580,82 @@ export class WeatherEffectController {
       if (monitorActor.particles.length < particleCountPerMonitor) {
         const toAdd = particleCountPerMonitor - monitorActor.particles.length;
         for (let i = 0; i < toAdd; i++) {
-          const particle = this._particleManager.createParticle(
-            type,
-            monitorActor,
-            screenWidth
-          );
-          monitorActor.particles.push(particle);
-          this._particleManager.animateSingleParticle(
-            particle,
-            monitorActor,
-            screenHeight,
-            baseDuration
-          );
+          // Check if still enabled before creating new particles
+          if (!this._isEnabled) {
+            break;
+          }
+          try {
+            const particle = this._particleManager.createParticle(
+              type,
+              monitorActor,
+              screenWidth
+            );
+            if (particle) {
+              monitorActor.particles.push(particle);
+              this._particleManager.animateSingleParticle(
+                particle,
+                monitorActor,
+                screenHeight,
+                baseDuration
+              );
+            }
+          } catch (e) {
+            // Failed to create particle, skip
+          }
         }
       }
 
       // Verify particle types
       for (let i = monitorActor.particles.length - 1; i >= 0; i--) {
         const particle = monitorActor.particles[i];
+        if (!particle || particle.is_finalized?.()) {
+          monitorActor.particles.splice(i, 1);
+          continue;
+        }
+
+        // Check if particle still has parent
+        try {
+          if (!particle.get_parent()) {
+            monitorActor.particles.splice(i, 1);
+            continue;
+          }
+        } catch (e) {
+          monitorActor.particles.splice(i, 1);
+          continue;
+        }
+
         if (!this._particleManager.isCorrectType(particle, type)) {
-          particle.remove_all_transitions();
-          particle.destroy();
+          try {
+            particle.remove_all_transitions();
+            particle.destroy();
+          } catch (e) {
+            // Particle already destroyed
+          }
           monitorActor.particles.splice(i, 1);
 
-          const newParticle = this._particleManager.createParticle(
-            type,
-            monitorActor,
-            screenWidth
-          );
-          monitorActor.particles.push(newParticle);
-          this._particleManager.animateSingleParticle(
-            newParticle,
-            monitorActor,
-            screenHeight,
-            baseDuration
-          );
+          // Check if still enabled before creating new particle
+          if (!this._isEnabled) {
+            continue;
+          }
+
+          try {
+            const newParticle = this._particleManager.createParticle(
+              type,
+              monitorActor,
+              screenWidth
+            );
+            if (newParticle) {
+              monitorActor.particles.push(newParticle);
+              this._particleManager.animateSingleParticle(
+                newParticle,
+                monitorActor,
+                screenHeight,
+                baseDuration
+              );
+            }
+          } catch (e) {
+            // Failed to create particle, skip
+          }
         }
       }
     }
@@ -585,43 +670,107 @@ export class WeatherEffectController {
     screenHeight: number,
     baseDuration: number
   ) {
-    if (!this._isEnabled) return;
+    // Early return if extension is disabled
+    if (!this._isEnabled) {
+      return;
+    }
+
+    // Check all required objects exist and are not finalized
     if (
       !particle ||
+      particle.is_finalized?.() ||
       !monitorActor ||
+      !monitorActor.actor ||
+      monitorActor.actor.is_finalized?.() ||
       !this._monitorManager ||
       !this._particleManager ||
-      !particle.get_parent()
+      !this._settings
     ) {
       return;
     }
 
-    particle.y = -20;
-    const safeWidth = Math.max(1, monitorActor.monitor.width);
-    particle.x = Math.random() * safeWidth;
+    // Check if particle still has parent
+    try {
+      if (!particle.get_parent()) {
+        return;
+      }
+    } catch (e) {
+      return;
+    }
 
-    const updatedType: EffectType = this._settings.get_string("effect-type");
-    const updatedSpeed = this._settings.get_int("speed");
-    const updatedBaseDuration =
-      this._particleManager.getBaseDuration(updatedSpeed);
-    const mode: DisplayMode = this._settings.get_string("display-mode");
+    // Check if monitor actor is still in the list
+    const monitorActors = this._monitorManager.getMonitorActors();
+    if (!monitorActors.includes(monitorActor)) {
+      return;
+    }
 
-    this._particleManager.updateParticleStyle(particle, updatedType);
+    try {
+      particle.y = -20;
+      const safeWidth = Math.max(1, monitorActor.monitor.width);
+      particle.x = Math.random() * safeWidth;
 
-    const canRun =
-      this._indicator?.toggle?.checked &&
-      (mode === "screen" || this._canRunOnMonitor(monitorActor));
+      const updatedType: EffectType = this._settings.get_string("effect-type");
+      const updatedSpeed = this._settings.get_int("speed");
+      const updatedBaseDuration =
+        this._particleManager.getBaseDuration(updatedSpeed);
+      const mode: DisplayMode = this._settings.get_string("display-mode");
 
-    if (canRun) {
-      this._particleManager.animateSingleParticle(
-        particle,
-        monitorActor,
-        screenHeight,
-        updatedBaseDuration
-      );
-    } else {
-      particle.remove_all_transitions();
-      particle.destroy();
+      this._particleManager.updateParticleStyle(particle, updatedType);
+
+      // Check if indicator and toggle are still valid
+      if (
+        !this._indicator ||
+        this._indicator.is_finalized?.() ||
+        !this._indicator.toggle ||
+        this._indicator.toggle.is_finalized?.()
+      ) {
+        // Clean up particle if indicator is invalid
+        try {
+          if (particle && !particle.is_finalized?.()) {
+            particle.remove_all_transitions();
+            particle.destroy();
+          }
+        } catch (e) {
+          // Particle already destroyed
+        }
+        const index = monitorActor.particles.indexOf(particle);
+        if (index !== -1) monitorActor.particles.splice(index, 1);
+        return;
+      }
+
+      const canRun =
+        this._indicator.toggle.checked &&
+        (mode === "screen" || this._canRunOnMonitor(monitorActor));
+
+      if (canRun) {
+        this._particleManager.animateSingleParticle(
+          particle,
+          monitorActor,
+          screenHeight,
+          updatedBaseDuration
+        );
+      } else {
+        try {
+          if (particle && !particle.is_finalized?.()) {
+            particle.remove_all_transitions();
+            particle.destroy();
+          }
+        } catch (e) {
+          // Particle already destroyed
+        }
+        const index = monitorActor.particles.indexOf(particle);
+        if (index !== -1) monitorActor.particles.splice(index, 1);
+      }
+    } catch (e) {
+      // Error during particle update, clean up
+      try {
+        if (particle && !particle.is_finalized?.()) {
+          particle.remove_all_transitions();
+          particle.destroy();
+        }
+      } catch (e2) {
+        // Particle already destroyed
+      }
       const index = monitorActor.particles.indexOf(particle);
       if (index !== -1) monitorActor.particles.splice(index, 1);
     }

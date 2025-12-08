@@ -53,6 +53,10 @@ export class MonitorManager {
    * Attach actors to the scene
    */
   attachMonitorActors() {
+    if (!this.settings) {
+      return;
+    }
+
     const mode = this.settings.get_string("display-mode") as
       | "screen"
       | "wallpaper";
@@ -124,12 +128,26 @@ export class MonitorManager {
    */
   destroy() {
     for (const monitorActor of this.monitorActors) {
-      monitorActor.particles.forEach((p) => {
-        p.remove_all_transitions();
-        p.destroy();
-      });
-      monitorActor.particles = [];
-      monitorActor.actor.destroy();
+      if (monitorActor) {
+        monitorActor.particles.forEach((p) => {
+          if (p && !p.is_finalized?.()) {
+            try {
+              p.remove_all_transitions();
+              p.destroy();
+            } catch (e) {
+              // Particle already destroyed
+            }
+          }
+        });
+        monitorActor.particles = [];
+        if (monitorActor.actor && !monitorActor.actor.is_finalized?.()) {
+          try {
+            monitorActor.actor.destroy();
+          } catch (e) {
+            // Actor already destroyed
+          }
+        }
+      }
     }
     this.monitorActors = [];
   }
@@ -145,9 +163,19 @@ export class MonitorManager {
    * Clear particles from a monitor
    */
   clearParticles(monitorActor: MonitorActor) {
+    if (!monitorActor) {
+      return;
+    }
+
     monitorActor.particles.forEach((p) => {
-      p.remove_all_transitions();
-      p.destroy();
+      if (p && !p.is_finalized?.()) {
+        try {
+          p.remove_all_transitions();
+          p.destroy();
+        } catch (e) {
+          // Particle already destroyed
+        }
+      }
     });
     monitorActor.particles = [];
   }

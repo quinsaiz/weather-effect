@@ -1,5 +1,4 @@
 // @ts-nocheck
-
 export const DEBUG = true;
 
 export function logDebug(msg: string) {
