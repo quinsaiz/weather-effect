@@ -3,7 +3,7 @@
 <p align="center">
     <img src="https://img.shields.io/badge/GNOME-Shell-blue?style=for-the-badge&logo=gnome" alt="GNOME Shell"/>
     <img src="https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge" alt="License"/>
-    <img src="https://img.shields.io/badge/Version-1.2-orange?style=for-the-badge" alt="Version"/>
+    <img src="https://img.shields.io/badge/Version-2.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 ## Description
@@ -97,8 +97,7 @@ sudo pacman -S nodejs npm glib2
    This will:
 
    - Compile TypeScript files to JavaScript
-   - Compile GNOME settings schemas
-   - Copy compiled files to gnome extensions folder
+   - Create the extension archive (.zip) and install it
 
 ## Usage
 
@@ -126,7 +125,6 @@ weather-effect/
 │       ├── MonitorManager.ts           # Monitor actor management
 │       ├── ObscurationManager.ts       # Window obscuration detection
 │       ├── ParticleManager.ts          # Particle creation & animation
-│       ├── EventManager.ts             # Centralized signal handlers
 │       └── Debug.ts                    # Centralized logging
 │
 ├── schemas/
