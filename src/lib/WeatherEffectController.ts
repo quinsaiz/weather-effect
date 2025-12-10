@@ -90,8 +90,9 @@ export class WeatherEffectController {
 
     this._stopAllTimeouts();
 
-    this._stopAnimation();
     this._disconnectAllHandlers();
+
+    this._stopAnimation();
 
     this._destroyUIAndManagers();
   }
@@ -102,6 +103,7 @@ export class WeatherEffectController {
   private _setupEventHandlers() {
     // Overview
     this._overviewHandler = Main.overview.connect("showing", () => {
+      if (!this._isEnabled) return;
       const mode: DisplayMode = this._settings.get_string("display-mode");
       if (mode === "wallpaper") {
         this._stopAnimation();
@@ -110,6 +112,7 @@ export class WeatherEffectController {
     });
 
     this._overviewHideHandler = Main.overview.connect("hidden", () => {
+      if (!this._isEnabled) return;
       this._recomputeObscuration();
       this._syncToggleState();
       logDebug("Overview hidden, syncing state");
@@ -119,11 +122,16 @@ export class WeatherEffectController {
     this._toggleHandler = this._indicator.toggle.connect(
       "notify::checked",
       () => {
+        if (!this._isEnabled) return;
         if (this._toggleTimeout) GLib.source_remove(this._toggleTimeout);
         this._toggleTimeout = GLib.timeout_add(
           GLib.PRIORITY_DEFAULT,
           50,
           () => {
+            if (!this._isEnabled) {
+              this._toggleTimeout = null;
+              return GLib.SOURCE_REMOVE;
+            }
             this._syncToggleState();
             logDebug("Toggle state changed");
             this._toggleTimeout = null;
@@ -148,6 +156,10 @@ export class WeatherEffectController {
               GLib.PRIORITY_DEFAULT,
               100,
               () => {
+                if (!this._isEnabled) {
+                  this._displayModeTimeout = null;
+                  return GLib.SOURCE_REMOVE;
+                }
                 this._syncToggleState();
                 this._displayModeTimeout = null;
                 return GLib.SOURCE_REMOVE;
@@ -164,7 +176,12 @@ export class WeatherEffectController {
     if (this._settings) {
       this._settingsHandlers.push(
         this._settings.connect("changed::pause-on-fullscreen", () => {
-          if (!this._isEnabled) return;
+          if (
+            !this._isEnabled ||
+            !this._monitorManager ||
+            !this._obscurationManager
+          )
+            return;
           this._recomputeObscuration();
           this._syncToggleState();
           logDebug("Pause on fullscreen setting changed");
@@ -176,6 +193,7 @@ export class WeatherEffectController {
     this._monitorsChangedHandler = Main.layoutManager.connect(
       "monitors-changed",
       () => {
+        if (!this._isEnabled) return;
         logDebug("Monitors changed");
         this._monitorManager?.destroy();
         this._monitorManager?.createMonitorActors();
@@ -187,6 +205,7 @@ export class WeatherEffectController {
     this._workareasChangedHandler = global.display.connect(
       "workareas-changed",
       () => {
+        if (!this._isEnabled) return;
         logDebug("Workareas changed");
         this._monitorManager?.updateMonitorActors();
         this._recomputeObscuration();
@@ -198,6 +217,7 @@ export class WeatherEffectController {
     this._workspaceChangedHandler = global.workspace_manager.connect(
       "active-workspace-changed",
       () => {
+        if (!this._isEnabled) return;
         logDebug("Active workspace changed");
         const mode: DisplayMode = this._settings.get_string("display-mode");
 
@@ -215,17 +235,20 @@ export class WeatherEffectController {
     this._windowCreatedHandler = global.display.connect(
       "window-created",
       () => {
+        if (!this._isEnabled) return;
         this._debouncedRecompute();
       }
     );
 
     this._windowHandler = global.window_manager.connect("size-changed", () => {
+      if (!this._isEnabled) return;
       this._debouncedRecompute();
     });
 
     this._windowMinimizeHandler = global.window_manager.connect(
       "minimize",
       () => {
+        if (!this._isEnabled) return;
         this._debouncedRecompute();
       }
     );
@@ -233,6 +256,7 @@ export class WeatherEffectController {
     this._windowUnminimizeHandler = global.window_manager.connect(
       "unminimize",
       () => {
+        if (!this._isEnabled) return;
         this._debouncedRecompute();
       }
     );
@@ -386,6 +410,10 @@ export class WeatherEffectController {
   private _debouncedRecompute() {
     if (this._debounceTimeout) GLib.source_remove(this._debounceTimeout);
     this._debounceTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+      if (!this._isEnabled) {
+        this._debounceTimeout = null;
+        return GLib.SOURCE_REMOVE;
+      }
       this._recomputeObscuration();
       this._syncToggleState();
       this._debounceTimeout = null;
@@ -398,12 +426,11 @@ export class WeatherEffectController {
    */
   private _syncToggleState() {
     try {
-      if (
-        !this._isEnabled ||
-        !this._indicator ||
-        !this._monitorManager ||
-        !this._settings
-      ) {
+      if (!this._isEnabled) {
+        return;
+      }
+
+      if (!this._indicator || !this._monitorManager || !this._settings) {
         return;
       }
 
@@ -413,17 +440,20 @@ export class WeatherEffectController {
 
       const toggle = this._getSafeToggle();
       if (!toggle) {
-        // If toggle is gone, stop animation to avoid accessing disposed actors
         this._stopAnimation();
         return;
       }
 
-      // Any property access on disposed objects can throw; guard with try
       let toggleChecked = false;
       try {
+        if (toggle.is_finalized?.()) {
+          this._stopAnimation();
+          return;
+        }
         toggleChecked = !!(toggle as any).checked;
       } catch (e) {
         logError(`toggle access failed: ${e}`);
+        this._stopAnimation();
         return;
       }
 
@@ -461,12 +491,16 @@ export class WeatherEffectController {
   private _startAnimation() {
     if (this.timeoutId) return;
 
-    if (!this._settings) return;
+    if (!this._isEnabled || !this._settings) return;
 
     const mode: DisplayMode = this._settings.get_string("display-mode");
     if (mode === "wallpaper" && Main.overview.visible) return;
 
     this.timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+      if (!this._isEnabled) {
+        this.timeoutId = null;
+        return GLib.SOURCE_REMOVE;
+      }
       this._animateParticles();
       return GLib.SOURCE_CONTINUE;
     });
@@ -484,7 +518,6 @@ export class WeatherEffectController {
       const monitorActors = this._monitorManager.getMonitorActors();
       for (const ma of monitorActors) {
         if (ma && ma.actor && !ma.actor.is_finalized?.()) {
-          // Stop all particle animations before clearing
           for (const particle of ma.particles) {
             if (particle && !particle.is_finalized?.()) {
               try {
@@ -505,10 +538,19 @@ export class WeatherEffectController {
    * Recompute obscuration for monitors
    */
   private _recomputeObscuration() {
-    if (!this._obscurationManager || !this._monitorManager) return;
-    this._obscurationManager.recomputeObscuration(
-      this._monitorManager.getMonitorActors()
-    );
+    try {
+      if (
+        !this._isEnabled ||
+        !this._obscurationManager ||
+        !this._monitorManager
+      )
+        return;
+      this._obscurationManager.recomputeObscuration(
+        this._monitorManager.getMonitorActors()
+      );
+    } catch (e) {
+      logError(`_recomputeObscuration failed: ${e}`);
+    }
   }
 
   /**
@@ -536,155 +578,152 @@ export class WeatherEffectController {
    * Animate all particles
    */
   private _animateParticles() {
-    if (
-      !this._isEnabled ||
-      !this._monitorManager ||
-      !this._particleManager ||
-      !this._settings
-    )
-      return;
-
-    const type: EffectType = this._settings.get_string("effect-type");
-    const totalParticleCount = this._settings.get_int("particle-count");
-    const speed = this._settings.get_int("speed");
-    const baseDuration = this._particleManager.getBaseDuration(speed);
-
-    const monitorActors = this._monitorManager.getMonitorActors();
-    const particleCountPerMonitor = Math.max(
-      1,
-      Math.floor(totalParticleCount / monitorActors.length)
-    );
-
-    for (const monitorActor of monitorActors) {
-      if (!monitorActor?.actor || monitorActor.actor.is_finalized?.()) {
-        continue;
+    try {
+      if (!this._isEnabled) {
+        return;
       }
-      if (!this._canRunOnMonitor(monitorActor)) {
-        if (monitorActor.particles.length > 0) {
-          logDebug(
-            `Clearing ${monitorActor.particles.length} particles on monitor ${monitorActor.monitor.index}`
-          );
-          this._monitorManager.clearParticles(monitorActor);
+
+      if (!this._monitorManager || !this._particleManager || !this._settings)
+        return;
+
+      const type: EffectType = this._settings.get_string("effect-type");
+      const totalParticleCount = this._settings.get_int("particle-count");
+      const speed = this._settings.get_int("speed");
+      const baseDuration = this._particleManager.getBaseDuration(speed);
+
+      const monitorActors = this._monitorManager.getMonitorActors();
+      const particleCountPerMonitor = Math.max(
+        1,
+        Math.floor(totalParticleCount / monitorActors.length)
+      );
+
+      for (const monitorActor of monitorActors) {
+        if (!monitorActor?.actor || monitorActor.actor.is_finalized?.()) {
+          continue;
         }
-        continue;
-      }
-
-      const screenWidth = Math.max(1, monitorActor.monitor.width);
-      const screenHeight = Math.max(1, monitorActor.monitor.height);
-
-      if (screenWidth <= 0 || screenHeight <= 0) continue;
-
-      // Ensure particles array exists
-      if (!monitorActor.particles) {
-        monitorActor.particles = [];
-      }
-
-      // Remove excess particles
-      while (monitorActor.particles.length > particleCountPerMonitor) {
-        const particle = monitorActor.particles.pop();
-        if (particle && !particle.is_finalized?.()) {
-          try {
-            particle.remove_all_transitions();
-            particle.destroy();
-          } catch (e) {
-            logError(`clearParticles destroy failed: ${e}`);
-          }
-        }
-      }
-
-      // Add new particles
-      if (monitorActor.particles.length < particleCountPerMonitor) {
-        const toAdd = particleCountPerMonitor - monitorActor.particles.length;
-        for (let i = 0; i < toAdd; i++) {
-          // Check if still enabled before creating new particles
-          if (!this._isEnabled) {
-            break;
-          }
-          try {
-            const particle = this._particleManager.createParticle(
-              type,
-              monitorActor,
-              screenWidth
+        if (!this._canRunOnMonitor(monitorActor)) {
+          if (monitorActor.particles.length > 0) {
+            logDebug(
+              `Clearing ${monitorActor.particles.length} particles on monitor ${monitorActor.monitor.index}`
             );
-            if (particle) {
-              monitorActor.particles.push(particle);
-              this._particleManager.animateSingleParticle(
-                particle,
-                monitorActor,
-                screenHeight,
-                baseDuration
-              );
-            }
-          } catch (e) {
-            logError(`createParticle failed: ${e}`);
+            this._monitorManager.clearParticles(monitorActor);
           }
-        }
-      }
-
-      // Verify particle types
-      for (let i = monitorActor.particles.length - 1; i >= 0; i--) {
-        const particle = monitorActor.particles[i];
-        if (
-          !particle ||
-          particle.is_finalized?.() ||
-          (particle as any)._weatherDisposed
-        ) {
-          monitorActor.particles.splice(i, 1);
           continue;
         }
 
-        // Check if particle still has parent
-        try {
-          if (!particle.get_parent()) {
+        const screenWidth = Math.max(1, monitorActor.monitor.width);
+        const screenHeight = Math.max(1, monitorActor.monitor.height);
+
+        if (screenWidth <= 0 || screenHeight <= 0) continue;
+
+        if (!monitorActor.particles) {
+          monitorActor.particles = [];
+        }
+
+        while (monitorActor.particles.length > particleCountPerMonitor) {
+          const particle = monitorActor.particles.pop();
+          if (particle && !particle.is_finalized?.()) {
+            try {
+              particle.remove_all_transitions();
+              particle.destroy();
+            } catch (e) {
+              logError(`clearParticles destroy failed: ${e}`);
+            }
+          }
+        }
+
+        if (monitorActor.particles.length < particleCountPerMonitor) {
+          const toAdd = particleCountPerMonitor - monitorActor.particles.length;
+          for (let i = 0; i < toAdd; i++) {
+            if (!this._isEnabled) {
+              break;
+            }
+            try {
+              const particle = this._particleManager.createParticle(
+                type,
+                monitorActor,
+                screenWidth
+              );
+              if (particle) {
+                monitorActor.particles.push(particle);
+                this._particleManager.animateSingleParticle(
+                  particle,
+                  monitorActor,
+                  screenHeight,
+                  baseDuration
+                );
+              }
+            } catch (e) {
+              logError(`createParticle failed: ${e}`);
+            }
+          }
+        }
+
+        for (let i = monitorActor.particles.length - 1; i >= 0; i--) {
+          const particle = monitorActor.particles[i];
+          if (
+            !particle ||
+            particle.is_finalized?.() ||
+            (particle as any)._weatherDisposed
+          ) {
             monitorActor.particles.splice(i, 1);
             continue;
           }
-        } catch (e) {
-          logError(`particle parent check failed: ${e}`);
-          monitorActor.particles.splice(i, 1);
-          continue;
-        }
 
-        // If the particle no longer exposes get_parent, treat as invalid
-        /*if (typeof (particle as any).get_parent !== "function") {
-          monitorActor.particles.splice(i, 1);
-          continue;
-        }*/
-
-        if (!this._particleManager.isCorrectType(particle, type)) {
           try {
-            particle.remove_all_transitions();
-            particle.destroy();
+            if (
+              particle.is_finalized?.() ||
+              typeof particle.get_parent !== "function"
+            ) {
+              monitorActor.particles.splice(i, 1);
+              continue;
+            }
+            if (!particle.get_parent()) {
+              monitorActor.particles.splice(i, 1);
+              continue;
+            }
           } catch (e) {
-            logError(`replace incorrect particle destroy failed: ${e}`);
-          }
-          monitorActor.particles.splice(i, 1);
-
-          // Check if still enabled before creating new particle
-          if (!this._isEnabled) {
+            logError(`particle parent check failed: ${e}`);
+            monitorActor.particles.splice(i, 1);
             continue;
           }
 
-          try {
-            const newParticle = this._particleManager.createParticle(
-              type,
-              monitorActor,
-              screenWidth
-            );
-            if (newParticle) {
-              monitorActor.particles.push(newParticle);
-              this._particleManager.animateSingleParticle(
-                newParticle,
-                monitorActor,
-                screenHeight,
-                baseDuration
-              );
+          if (!this._particleManager.isCorrectType(particle, type)) {
+            try {
+              particle.remove_all_transitions();
+              particle.destroy();
+            } catch (e) {
+              logError(`replace incorrect particle destroy failed: ${e}`);
             }
-          } catch (e) {
-            logError(`recreate particle failed: ${e}`);
+            monitorActor.particles.splice(i, 1);
+
+            if (!this._isEnabled) {
+              continue;
+            }
+
+            try {
+              const newParticle = this._particleManager.createParticle(
+                type,
+                monitorActor,
+                screenWidth
+              );
+              if (newParticle) {
+                monitorActor.particles.push(newParticle);
+                this._particleManager.animateSingleParticle(
+                  newParticle,
+                  monitorActor,
+                  screenHeight,
+                  baseDuration
+                );
+              }
+            } catch (e) {
+              logError(`recreate particle failed: ${e}`);
+            }
           }
         }
       }
+    } catch (e) {
+      logError(`_animateParticles failed: ${e}`);
     }
   }
 
@@ -698,12 +737,10 @@ export class WeatherEffectController {
     baseDuration: number
   ) {
     try {
-      // Early return if extension is disabled
       if (!this._isEnabled) {
         return;
       }
 
-      // Check all required objects exist and are not finalized
       if (
         !particle ||
         particle.is_finalized?.() ||
@@ -717,7 +754,6 @@ export class WeatherEffectController {
         return;
       }
 
-      // If monitor actor itself was destroyed, stop
       try {
         if (!monitorActor.actor || monitorActor.actor.is_finalized?.()) {
           return;
@@ -727,12 +763,10 @@ export class WeatherEffectController {
         return;
       }
 
-      // Check if particle still has parent
       if (typeof (particle as any).get_parent !== "function") {
         return;
       }
 
-      // Check if monitor actor is still in the list
       const monitorActors = this._monitorManager.getMonitorActors();
       if (!monitorActors.includes(monitorActor)) {
         return;
@@ -752,7 +786,6 @@ export class WeatherEffectController {
 
         this._particleManager.updateParticleStyle(particle, updatedType);
 
-        // Check if indicator and toggle are still valid
         const toggle = this._getSafeToggle();
         if (!toggle) {
           this._safeDestroyParticle(particle, monitorActor);
@@ -783,7 +816,6 @@ export class WeatherEffectController {
         }
       } catch (e) {
         logError(`onParticleAnimationComplete failed: ${e}`);
-        // Error during particle update, clean up
         this._safeDestroyParticle(particle, monitorActor, true);
       }
     } catch (e) {
@@ -801,7 +833,6 @@ export class WeatherEffectController {
   ) {
     try {
       if (particle && !particle.is_finalized?.()) {
-        // Mark as disposed to avoid later GObject calls that spam warnings
         (particle as any)._weatherDisposed = true;
         particle.remove_all_transitions();
         particle.destroy();

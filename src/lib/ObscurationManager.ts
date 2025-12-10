@@ -104,25 +104,21 @@ export class ObscurationManager {
     isOverviewVisible: boolean
   ): boolean {
     try {
-      if (!this.settings) {
+      if (!this.settings || !monitorActor) {
         return false;
       }
 
-      // Access to disposed toggle may throw; guard in try/catch
+      let checked: boolean = false;
       try {
-        if (!toggle || typeof toggle !== "object" || toggle.is_finalized?.()) {
+        if (!toggle || typeof toggle !== "object") {
           return false;
         }
-      } catch (e) {
-        logError(`toggle disposal check failed: ${e}`);
-        return false;
-      }
-
-      let checked: boolean;
-      try {
+        if (toggle.is_finalized?.()) {
+          return false;
+        }
         checked = !!(toggle as any).checked;
       } catch (e) {
-        logError(`toggle checked read failed: ${e}`);
+        logError(`toggle check failed: ${e}`);
         return false;
       }
 
@@ -188,28 +184,34 @@ export class ObscurationManager {
    * Recompute obscuration for all monitors
    */
   recomputeObscuration(monitorActors: MonitorActor[]) {
-    if (!this.settings || !monitorActors) {
-      return;
-    }
-
-    const mode: DisplayMode = this.settings.get_string("display-mode");
-
-    if (mode === "screen") {
-      this.monitorObscuredCache.clear();
-      return;
-    }
-
-    for (const ma of monitorActors) {
-      const wasObscured =
-        this.monitorObscuredCache.get(ma.monitor.index) ?? false;
-      const nowObscured = this.isMonitorObscured(ma.monitor);
-
-      if (wasObscured !== nowObscured) {
-        logDebug(
-          `Monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`
-        );
-        this.monitorObscuredCache.set(ma.monitor.index, nowObscured);
+    try {
+      if (!this.settings || !monitorActors) {
+        return;
       }
+
+      const mode: DisplayMode = this.settings.get_string("display-mode");
+
+      if (mode === "screen") {
+        this.monitorObscuredCache.clear();
+        return;
+      }
+
+      for (const ma of monitorActors) {
+        if (!ma || !ma.monitor) continue;
+
+        const wasObscured =
+          this.monitorObscuredCache.get(ma.monitor.index) ?? false;
+        const nowObscured = this.isMonitorObscured(ma.monitor);
+
+        if (wasObscured !== nowObscured) {
+          logDebug(
+            `Monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`
+          );
+          this.monitorObscuredCache.set(ma.monitor.index, nowObscured);
+        }
+      }
+    } catch (e) {
+      logError(`recomputeObscuration failed: ${e}`);
     }
   }
 

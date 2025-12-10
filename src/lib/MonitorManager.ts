@@ -65,7 +65,6 @@ export class MonitorManager {
       (Main.layoutManager as any)._backgroundGroup;
 
     for (const monitorActor of this.monitorActors) {
-      // Skip finalized actors entirely
       if (!monitorActor.actor || monitorActor.actor.is_finalized?.()) {
         continue;
       }
@@ -91,7 +90,6 @@ export class MonitorManager {
           logError(`attach monitor actor to backgroundGroup failed: ${e}`);
         }
       } else {
-        // Fallback: attach to uiGroup to avoid crashes on GNOME changes
         try {
           Main.layoutManager.uiGroup.add_child(monitorActor.actor);
         } catch (e) {

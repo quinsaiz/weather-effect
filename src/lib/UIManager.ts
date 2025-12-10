@@ -194,20 +194,29 @@ export const WeatherIndicator = GObject.registerClass(
     }
 
     _updateIndicatorIcon() {
-      if (
-        !this._settings ||
-        !this.toggle ||
-        !this._indicator ||
-        this.toggle.is_finalized?.()
-      )
-        return;
-      const effectType: EffectType = this._settings.get_string("effect-type");
-      const checked = this.toggle.checked;
-      this._indicator.icon_name = checked
-        ? effectType === "snow"
-          ? "weather-snow-symbolic"
-          : "weather-showers-symbolic"
-        : "weather-clear-symbolic";
+      try {
+        if (
+          !this._settings ||
+          !this.toggle ||
+          !this._indicator ||
+          this.toggle.is_finalized?.()
+        )
+          return;
+        const effectType: EffectType = this._settings.get_string("effect-type");
+        let checked = false;
+        try {
+          checked = this.toggle.checked;
+        } catch (e) {
+          return;
+        }
+        this._indicator.icon_name = checked
+          ? effectType === "snow"
+            ? "weather-snow-symbolic"
+            : "weather-showers-symbolic"
+          : "weather-clear-symbolic";
+      } catch (e) {
+        logError(`Failed to update indicator icon: ${e}`);
+      }
     }
 
     destroy() {

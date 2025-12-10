@@ -31,34 +31,19 @@ Weather Effect is a GNOME Shell extension that adds beautiful animated weather e
 
 ### Prerequisites
 
-- GNOME Shell 45-49
-- Git (for cloning the repository)
+- GNOME Shell 45+
 
 ### Quick Installation
 
-1. **Clone the repository:**
+1. **Download last [weather-effect@quinsaiz.github.shell-extension.zip](https://github.com/quinsaiz/weather-effect/releases)**
+
+2. **Install:**
 
    ```bash
-   git clone https://github.com/quinsaiz/weather-effect.git
-   cd weather-effect/scripts
+   gnome-extensions install weather-effect@quinsaiz.github.shell-extension.zip
    ```
 
-2. **Make the install script executable:**
-
-   ```bash
-   chmod +x install.sh
-   ```
-
-3. **Run the installation script:**
-
-   ```bash
-   ./install.sh
-   ```
-
-4. **Enable the extension:**
-   - Log out and log back in
-   - Open GNOME Extensions app
-   - Find "Weather Effect" and enable it
+3. **Log out and log back in**
 
 ## Building from Source
 
@@ -66,24 +51,23 @@ If you want to build the extension from source code, follow these steps:
 
 ### Prerequisites for Building
 
-- **Node.js** (v16 or higher) - [Download](https://nodejs.org/)
+- **[Node.js](https://nodejs.org/)** (v16 or higher)
 - **npm** (comes with Node.js)
-- **TypeScript** (installed via npm)
 - **glib-compile-schemas** (usually comes with GNOME development packages)
 
-On Ubuntu/Debian:
+#### Ubuntu/Debian:
 
 ```bash
 sudo apt install nodejs npm gir1.2-glib-2.0
 ```
 
-On Fedora:
+#### Fedora:
 
 ```bash
 sudo dnf install nodejs npm glib2-devel
 ```
 
-On Arch:
+#### Arch:
 
 ```bash
 sudo pacman -S nodejs npm glib2
@@ -116,16 +100,6 @@ sudo pacman -S nodejs npm glib2
    - Compile GNOME settings schemas
    - Copy compiled files to gnome extensions folder
 
-### Development Mode
-
-For continuous development with auto-rebuild:
-
-```bash
-npm run watch
-```
-
-This will watch for file changes and automatically rebuild the extension.
-
 ## Usage
 
 1. **Open Quick Settings** by clicking the system menu in the top-right corner
@@ -155,16 +129,12 @@ weather-effect/
 │       ├── EventManager.ts             # Centralized signal handlers
 │       └── Debug.ts                    # Centralized logging
 │
-├── dist/                 # Compiled JavaScript output
-│   ├── extension.js
-│   ├── prefs.js
-│   └── lib/
-│       └── *.js          # Compiled library modules
-│
 ├── schemas/
 │   └── org.gnome.shell.extensions.weather-effect.gschema.xml
 │
-├── install.sh            # Installation script
+├── scripts/
+│   └── build.sh          # Build and installation script
+│
 ├── package.json          # Dependencies & build scripts
 ├── tsconfig.json         # TypeScript compiler options
 ├── LICENSE               # GPLv3 License

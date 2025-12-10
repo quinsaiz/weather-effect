@@ -95,7 +95,6 @@ export class ParticleManager {
         monitorActor.actor.add_child(particle);
       }
     } catch (e) {
-      // Fallback to simple widget if emoji causes issues
       logError(`createParticle fallback: ${e}`);
       particle = new St.Widget({
         style: `background-color: ${
@@ -150,7 +149,6 @@ export class ParticleManager {
         }
       }
     } catch (e) {
-      // If emoji update fails, keep existing style
       logError(`updateParticleStyle failed: ${e}`);
     }
   }
@@ -192,7 +190,6 @@ export class ParticleManager {
       return;
     }
 
-    // Store reference to check in callback
     const particleRef = particle;
     const monitorActorRef = monitorActor;
 
@@ -204,7 +201,6 @@ export class ParticleManager {
         duration: baseDuration + randomOffset,
         mode: Clutter.AnimationMode.LINEAR,
         onComplete: () => {
-          // Check if objects are still valid before calling callback
           if (
             !particleRef ||
             particleRef.is_finalized?.() ||
@@ -214,7 +210,6 @@ export class ParticleManager {
           ) {
             return;
           }
-          // Check if particle still has parent (not removed)
           try {
             if (!particleRef.get_parent()) {
               return;
