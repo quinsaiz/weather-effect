@@ -6,7 +6,7 @@ import { WeatherIndicator } from "./UIManager.js";
 import { MonitorManager, MonitorActor } from "./MonitorManager.js";
 import { ObscurationManager } from "./ObscurationManager.js";
 import { ParticleManager } from "./ParticleManager.js";
-import { logDebug } from "./Debug.js";
+import { logDebug, logError } from "./Debug.js";
 
 type EffectType = "snow" | "rain";
 type DisplayMode = "wallpaper" | "screen";
@@ -397,45 +397,61 @@ export class WeatherEffectController {
    * Sync toggle state
    */
   private _syncToggleState() {
-    if (
-      !this._isEnabled ||
-      !this._indicator ||
-      !this._monitorManager ||
-      !this._settings
-    ) {
-      return;
-    }
-
-    if (this._indicator.is_finalized?.()) {
-      return;
-    }
-
-    if (!this._indicator.toggle || this._indicator.toggle.is_finalized?.()) {
-      return;
-    }
-
-    const mode: DisplayMode = this._settings.get_string("display-mode");
-    let shouldRun = false;
-
-    if (this._indicator.toggle.checked) {
-      if (mode === "screen") {
-        shouldRun = true;
-      } else if (!Main.overview.visible) {
-        const anyActive = this._monitorManager
-          .getMonitorActors()
-          .some((ma) => this._canRunOnMonitor(ma));
-        shouldRun = anyActive;
+    try {
+      if (
+        !this._isEnabled ||
+        !this._indicator ||
+        !this._monitorManager ||
+        !this._settings
+      ) {
+        return;
       }
-    }
 
-    const isRunning = !!this.timeoutId;
+      if (this._indicator.is_finalized?.()) {
+        return;
+      }
 
-    if (shouldRun && !isRunning) {
-      logDebug("Starting animation");
-      this._startAnimation();
-    } else if (!shouldRun && isRunning) {
-      logDebug("Stopping animation");
-      this._stopAnimation();
+      const toggle = this._getSafeToggle();
+      if (!toggle) {
+        // If toggle is gone, stop animation to avoid accessing disposed actors
+        this._stopAnimation();
+        return;
+      }
+
+      // Any property access on disposed objects can throw; guard with try
+      let toggleChecked = false;
+      try {
+        toggleChecked = !!(toggle as any).checked;
+      } catch (e) {
+        logError(`toggle access failed: ${e}`);
+        return;
+      }
+
+      const mode: DisplayMode = this._settings.get_string("display-mode");
+      let shouldRun = false;
+
+      if (toggleChecked) {
+        if (mode === "screen") {
+          shouldRun = true;
+        } else if (!Main.overview.visible) {
+          const anyActive = this._monitorManager
+            .getMonitorActors()
+            .some((ma) => this._canRunOnMonitor(ma));
+          shouldRun = anyActive;
+        }
+      }
+
+      const isRunning = !!this.timeoutId;
+
+      if (shouldRun && !isRunning) {
+        logDebug("Starting animation");
+        this._startAnimation();
+      } else if (!shouldRun && isRunning) {
+        logDebug("Stopping animation");
+        this._stopAnimation();
+      }
+    } catch (e) {
+      logError(`syncToggleState failed: ${e}`);
     }
   }
 
@@ -467,14 +483,15 @@ export class WeatherEffectController {
     if (this._monitorManager) {
       const monitorActors = this._monitorManager.getMonitorActors();
       for (const ma of monitorActors) {
-        if (ma) {
+        if (ma && ma.actor && !ma.actor.is_finalized?.()) {
           // Stop all particle animations before clearing
           for (const particle of ma.particles) {
             if (particle && !particle.is_finalized?.()) {
               try {
+                (particle as any)._weatherDisposed = true;
                 particle.remove_all_transitions();
               } catch (e) {
-                // Transition already removed
+                logError(`remove_all_transitions failed: ${e}`);
               }
             }
           }
@@ -498,25 +515,21 @@ export class WeatherEffectController {
    * Can run on monitor
    */
   private _canRunOnMonitor(monitorActor: MonitorActor): boolean {
-    if (
-      !this._isEnabled ||
-      !this._obscurationManager ||
-      !this._indicator?.toggle
-    )
-      return false;
+    try {
+      if (!this._isEnabled || !this._obscurationManager) return false;
 
-    if (
-      this._indicator.toggle.is_finalized?.() ||
-      (this._indicator.toggle as any)._deleted
-    ) {
+      const toggle = this._getSafeToggle();
+      if (!toggle) return false;
+
+      return this._obscurationManager.canRunOnMonitor(
+        monitorActor,
+        toggle,
+        Main.overview.visible
+      );
+    } catch (e) {
+      logError(`canRunOnMonitor guard failed: ${e}`);
       return false;
     }
-
-    return this._obscurationManager.canRunOnMonitor(
-      monitorActor,
-      this._indicator.toggle,
-      Main.overview.visible
-    );
   }
 
   /**
@@ -543,6 +556,9 @@ export class WeatherEffectController {
     );
 
     for (const monitorActor of monitorActors) {
+      if (!monitorActor?.actor || monitorActor.actor.is_finalized?.()) {
+        continue;
+      }
       if (!this._canRunOnMonitor(monitorActor)) {
         if (monitorActor.particles.length > 0) {
           logDebug(
@@ -571,7 +587,7 @@ export class WeatherEffectController {
             particle.remove_all_transitions();
             particle.destroy();
           } catch (e) {
-            // Particle already destroyed
+            logError(`clearParticles destroy failed: ${e}`);
           }
         }
       }
@@ -600,7 +616,7 @@ export class WeatherEffectController {
               );
             }
           } catch (e) {
-            // Failed to create particle, skip
+            logError(`createParticle failed: ${e}`);
           }
         }
       }
@@ -608,7 +624,11 @@ export class WeatherEffectController {
       // Verify particle types
       for (let i = monitorActor.particles.length - 1; i >= 0; i--) {
         const particle = monitorActor.particles[i];
-        if (!particle || particle.is_finalized?.()) {
+        if (
+          !particle ||
+          particle.is_finalized?.() ||
+          (particle as any)._weatherDisposed
+        ) {
           monitorActor.particles.splice(i, 1);
           continue;
         }
@@ -620,16 +640,23 @@ export class WeatherEffectController {
             continue;
           }
         } catch (e) {
+          logError(`particle parent check failed: ${e}`);
           monitorActor.particles.splice(i, 1);
           continue;
         }
+
+        // If the particle no longer exposes get_parent, treat as invalid
+        /*if (typeof (particle as any).get_parent !== "function") {
+          monitorActor.particles.splice(i, 1);
+          continue;
+        }*/
 
         if (!this._particleManager.isCorrectType(particle, type)) {
           try {
             particle.remove_all_transitions();
             particle.destroy();
           } catch (e) {
-            // Particle already destroyed
+            logError(`replace incorrect particle destroy failed: ${e}`);
           }
           monitorActor.particles.splice(i, 1);
 
@@ -654,7 +681,7 @@ export class WeatherEffectController {
               );
             }
           } catch (e) {
-            // Failed to create particle, skip
+            logError(`recreate particle failed: ${e}`);
           }
         }
       }
@@ -670,109 +697,142 @@ export class WeatherEffectController {
     screenHeight: number,
     baseDuration: number
   ) {
-    // Early return if extension is disabled
-    if (!this._isEnabled) {
-      return;
-    }
-
-    // Check all required objects exist and are not finalized
-    if (
-      !particle ||
-      particle.is_finalized?.() ||
-      !monitorActor ||
-      !monitorActor.actor ||
-      monitorActor.actor.is_finalized?.() ||
-      !this._monitorManager ||
-      !this._particleManager ||
-      !this._settings
-    ) {
-      return;
-    }
-
-    // Check if particle still has parent
     try {
-      if (!particle.get_parent()) {
+      // Early return if extension is disabled
+      if (!this._isEnabled) {
         return;
       }
-    } catch (e) {
-      return;
-    }
 
-    // Check if monitor actor is still in the list
-    const monitorActors = this._monitorManager.getMonitorActors();
-    if (!monitorActors.includes(monitorActor)) {
-      return;
-    }
-
-    try {
-      particle.y = -20;
-      const safeWidth = Math.max(1, monitorActor.monitor.width);
-      particle.x = Math.random() * safeWidth;
-
-      const updatedType: EffectType = this._settings.get_string("effect-type");
-      const updatedSpeed = this._settings.get_int("speed");
-      const updatedBaseDuration =
-        this._particleManager.getBaseDuration(updatedSpeed);
-      const mode: DisplayMode = this._settings.get_string("display-mode");
-
-      this._particleManager.updateParticleStyle(particle, updatedType);
-
-      // Check if indicator and toggle are still valid
+      // Check all required objects exist and are not finalized
       if (
-        !this._indicator ||
-        this._indicator.is_finalized?.() ||
-        !this._indicator.toggle ||
-        this._indicator.toggle.is_finalized?.()
+        !particle ||
+        particle.is_finalized?.() ||
+        !monitorActor ||
+        !monitorActor.actor ||
+        monitorActor.actor.is_finalized?.() ||
+        !this._monitorManager ||
+        !this._particleManager ||
+        !this._settings
       ) {
-        // Clean up particle if indicator is invalid
-        try {
-          if (particle && !particle.is_finalized?.()) {
-            particle.remove_all_transitions();
-            particle.destroy();
-          }
-        } catch (e) {
-          // Particle already destroyed
-        }
-        const index = monitorActor.particles.indexOf(particle);
-        if (index !== -1) monitorActor.particles.splice(index, 1);
         return;
       }
 
-      const canRun =
-        this._indicator.toggle.checked &&
-        (mode === "screen" || this._canRunOnMonitor(monitorActor));
-
-      if (canRun) {
-        this._particleManager.animateSingleParticle(
-          particle,
-          monitorActor,
-          screenHeight,
-          updatedBaseDuration
-        );
-      } else {
-        try {
-          if (particle && !particle.is_finalized?.()) {
-            particle.remove_all_transitions();
-            particle.destroy();
-          }
-        } catch (e) {
-          // Particle already destroyed
+      // If monitor actor itself was destroyed, stop
+      try {
+        if (!monitorActor.actor || monitorActor.actor.is_finalized?.()) {
+          return;
         }
-        const index = monitorActor.particles.indexOf(particle);
-        if (index !== -1) monitorActor.particles.splice(index, 1);
+      } catch (e) {
+        logError(`monitorActor actor check failed: ${e}`);
+        return;
+      }
+
+      // Check if particle still has parent
+      if (typeof (particle as any).get_parent !== "function") {
+        return;
+      }
+
+      // Check if monitor actor is still in the list
+      const monitorActors = this._monitorManager.getMonitorActors();
+      if (!monitorActors.includes(monitorActor)) {
+        return;
+      }
+
+      try {
+        particle.y = -20;
+        const safeWidth = Math.max(1, monitorActor.monitor.width);
+        particle.x = Math.random() * safeWidth;
+
+        const updatedType: EffectType =
+          this._settings.get_string("effect-type");
+        const updatedSpeed = this._settings.get_int("speed");
+        const updatedBaseDuration =
+          this._particleManager.getBaseDuration(updatedSpeed);
+        const mode: DisplayMode = this._settings.get_string("display-mode");
+
+        this._particleManager.updateParticleStyle(particle, updatedType);
+
+        // Check if indicator and toggle are still valid
+        const toggle = this._getSafeToggle();
+        if (!toggle) {
+          this._safeDestroyParticle(particle, monitorActor);
+          return;
+        }
+
+        let toggleChecked = false;
+        try {
+          toggleChecked = !!toggle.checked;
+        } catch (e) {
+          logError(`toggle checked access failed: ${e}`);
+          toggleChecked = false;
+        }
+
+        const canRun =
+          toggleChecked &&
+          (mode === "screen" || this._canRunOnMonitor(monitorActor));
+
+        if (canRun) {
+          this._particleManager.animateSingleParticle(
+            particle,
+            monitorActor,
+            screenHeight,
+            updatedBaseDuration
+          );
+        } else {
+          this._safeDestroyParticle(particle, monitorActor);
+        }
+      } catch (e) {
+        logError(`onParticleAnimationComplete failed: ${e}`);
+        // Error during particle update, clean up
+        this._safeDestroyParticle(particle, monitorActor, true);
       }
     } catch (e) {
-      // Error during particle update, clean up
-      try {
-        if (particle && !particle.is_finalized?.()) {
-          particle.remove_all_transitions();
-          particle.destroy();
-        }
-      } catch (e2) {
-        // Particle already destroyed
+      logError(`onParticleAnimationComplete guard failed: ${e}`);
+    }
+  }
+
+  /**
+   * Safely destroy a particle and remove from monitor
+   */
+  private _safeDestroyParticle(
+    particle: any,
+    monitorActor: MonitorActor,
+    logErrors: boolean = false
+  ) {
+    try {
+      if (particle && !particle.is_finalized?.()) {
+        // Mark as disposed to avoid later GObject calls that spam warnings
+        (particle as any)._weatherDisposed = true;
+        particle.remove_all_transitions();
+        particle.destroy();
       }
-      const index = monitorActor.particles.indexOf(particle);
-      if (index !== -1) monitorActor.particles.splice(index, 1);
+    } catch (e) {
+      if (logErrors) {
+        logError(`cleanup after failure failed: ${e}`);
+      }
+    }
+    const index = monitorActor.particles.indexOf(particle);
+    if (index !== -1) monitorActor.particles.splice(index, 1);
+  }
+
+  /**
+   * Safely get the toggle, guarding against disposed actors
+   */
+  private _getSafeToggle(): any | null {
+    try {
+      if (!this._indicator || this._indicator.is_finalized?.()) return null;
+      const toggle = this._indicator.toggle;
+      if (!toggle) return null;
+      try {
+        if (toggle.is_finalized?.() || (toggle as any)._deleted) {
+          return null;
+        }
+      } catch (_e) {
+        return null;
+      }
+      return toggle;
+    } catch (_e) {
+      return null;
     }
   }
 }

@@ -52,6 +52,7 @@ function build_extension() {
     fi
 
     rm -rf "$TMP_PACK"
+    #rm -rf "$DIST_DIR"
 }
 
 function install_extension() {
@@ -81,7 +82,7 @@ case "$1" in
         uninstall_extension
         ;;
     *)
-        echo -e "${RED}Usage:${RESET} $0 [--install | -i | --uninstall | -u]"
+        echo -e "${RED}Usage:${RESET} $0 [--install | -i / --uninstall | -u]"
         exit 1
         ;;
 esac

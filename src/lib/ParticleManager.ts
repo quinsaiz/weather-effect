@@ -2,6 +2,7 @@
 import Clutter from "gi://Clutter";
 import St from "gi://St";
 import { MonitorActor } from "./MonitorManager.js";
+import { logDebug, logError } from "./Debug.js";
 
 type EffectType = "snow" | "rain";
 
@@ -95,6 +96,7 @@ export class ParticleManager {
       }
     } catch (e) {
       // Fallback to simple widget if emoji causes issues
+      logError(`createParticle fallback: ${e}`);
       particle = new St.Widget({
         style: `background-color: ${
           type === "snow"
@@ -149,6 +151,7 @@ export class ParticleManager {
       }
     } catch (e) {
       // If emoji update fails, keep existing style
+      logError(`updateParticleStyle failed: ${e}`);
     }
   }
 
@@ -217,6 +220,7 @@ export class ParticleManager {
               return;
             }
           } catch (e) {
+            logError(`animateSingleParticle parent check failed: ${e}`);
             return;
           }
           this.onAnimationFrame(
@@ -228,7 +232,7 @@ export class ParticleManager {
         },
       });
     } catch (e) {
-      // Animation failed, particle may be destroyed
+      logError(`animateSingleParticle failed: ${e}`);
     }
   }
 
@@ -274,7 +278,7 @@ export class ParticleManager {
         }
       }
     } catch (e) {
-      // If check fails, assume incorrect type
+      logError(`isCorrectType check failed: ${e}`);
       return false;
     }
     return false;

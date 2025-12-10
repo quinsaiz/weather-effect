@@ -3,7 +3,7 @@ import Meta from "gi://Meta";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
 import { MonitorActor } from "./MonitorManager.js";
-import { logDebug } from "./Debug.js";
+import { logDebug, logError } from "./Debug.js";
 
 type DisplayMode = "wallpaper" | "screen";
 
@@ -90,7 +90,7 @@ export class ObscurationManager {
       const ratio = covered / area;
       return ratio >= 0.95;
     } catch (e) {
-      // Error accessing window information, assume not obscured
+      logError(`isMonitorObscured failed for monitor ${monitor.index}: ${e}`);
       return false;
     }
   }
@@ -103,68 +103,85 @@ export class ObscurationManager {
     toggle: any,
     isOverviewVisible: boolean
   ): boolean {
-    if (!toggle || typeof toggle !== "object" || toggle.is_finalized?.()) {
-      return false;
-    }
+    try {
+      if (!this.settings) {
+        return false;
+      }
 
-    if (typeof toggle.checked === "undefined") {
-      return false;
-    }
-
-    if (!this.settings) {
-      return false;
-    }
-
-    const mode: DisplayMode = this.settings.get_string("display-mode");
-
-    if (mode === "screen") {
+      // Access to disposed toggle may throw; guard in try/catch
       try {
-        const activeWs = global.workspace_manager.get_active_workspace();
-        if (!activeWs) {
-          return toggle.checked;
-        }
-
-        const windowActors = global.get_window_actors();
-        if (!windowActors) {
-          return toggle.checked;
-        }
-
-        const windows = windowActors
-          .map((actor: any) => {
-            try {
-              return actor?.meta_window as Meta.Window;
-            } catch (e) {
-              return null;
-            }
-          })
-          .filter(
-            (w): w is Meta.Window =>
-              w !== null &&
-              !w.minimized &&
-              w.get_workspace() === activeWs &&
-              w.get_monitor() === monitorActor.monitor.index &&
-              w.get_window_type() === Meta.WindowType.NORMAL
-          );
-
-        const pauseOnFullscreen = this.settings.get_boolean(
-          "pause-on-fullscreen"
-        );
-        if (pauseOnFullscreen && windows.some((w) => w.is_fullscreen())) {
+        if (!toggle || typeof toggle !== "object" || toggle.is_finalized?.()) {
           return false;
         }
-
-        return toggle.checked;
       } catch (e) {
-        // Error accessing window information, return toggle state
-        return toggle.checked;
+        logError(`toggle disposal check failed: ${e}`);
+        return false;
       }
+
+      let checked: boolean;
+      try {
+        checked = !!(toggle as any).checked;
+      } catch (e) {
+        logError(`toggle checked read failed: ${e}`);
+        return false;
+      }
+
+      const mode: DisplayMode = this.settings.get_string("display-mode");
+
+      if (mode === "screen") {
+        try {
+          const activeWs = global.workspace_manager.get_active_workspace();
+          if (!activeWs) {
+            return checked;
+          }
+
+          const windowActors = global.get_window_actors();
+          if (!windowActors) {
+            return checked;
+          }
+
+          const windows = windowActors
+            .map((actor: any) => {
+              try {
+                return actor?.meta_window as Meta.Window;
+              } catch (e) {
+                return null;
+              }
+            })
+            .filter(
+              (w): w is Meta.Window =>
+                w !== null &&
+                !w.minimized &&
+                w.get_workspace() === activeWs &&
+                w.get_monitor() === monitorActor.monitor.index &&
+                w.get_window_type() === Meta.WindowType.NORMAL
+            );
+
+          const pauseOnFullscreen = this.settings.get_boolean(
+            "pause-on-fullscreen"
+          );
+          if (pauseOnFullscreen && windows.some((w) => w.is_fullscreen())) {
+            return false;
+          }
+
+          return checked;
+        } catch (e) {
+          logError(
+            `canRunOnMonitor screen-mode window check failed on monitor ${monitorActor.monitor.index}: ${e}`
+          );
+          return checked;
+        }
+      }
+
+      if (isOverviewVisible) return false;
+
+      const obscured =
+        this.monitorObscuredCache.get(monitorActor.monitor.index) ?? false;
+      return !obscured && checked;
+    } catch (e) {
+      logError(`canRunOnMonitor failed: ${e}`);
+      return false;
     }
-
-    if (isOverviewVisible) return false;
-
-    const obscured =
-      this.monitorObscuredCache.get(monitorActor.monitor.index) ?? false;
-    return !obscured && toggle.checked;
   }
 
   /**

@@ -3,7 +3,7 @@ import Clutter from "gi://Clutter";
 import St from "gi://St";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
-import { logDebug } from "./Debug.js";
+import { logDebug, logError } from "./Debug.js";
 
 export interface MonitorActor {
   actor: Clutter.Actor;
@@ -60,15 +60,43 @@ export class MonitorManager {
     const mode = this.settings.get_string("display-mode") as
       | "screen"
       | "wallpaper";
+    const backgroundGroup =
+      (Main.layoutManager as any).backgroundGroup ??
+      (Main.layoutManager as any)._backgroundGroup;
 
     for (const monitorActor of this.monitorActors) {
-      const parent = monitorActor.actor.get_parent();
-      if (parent) parent.remove_child(monitorActor.actor);
+      // Skip finalized actors entirely
+      if (!monitorActor.actor || monitorActor.actor.is_finalized?.()) {
+        continue;
+      }
+
+      try {
+        const parent = monitorActor.actor.get_parent();
+        if (parent) parent.remove_child(monitorActor.actor);
+      } catch (e) {
+        logError(`detach monitor actor failed: ${e}`);
+        continue;
+      }
 
       if (mode === "screen") {
-        Main.layoutManager.uiGroup.add_child(monitorActor.actor);
+        try {
+          Main.layoutManager.uiGroup.add_child(monitorActor.actor);
+        } catch (e) {
+          logError(`attach monitor actor to uiGroup failed: ${e}`);
+        }
+      } else if (backgroundGroup) {
+        try {
+          backgroundGroup.add_child(monitorActor.actor);
+        } catch (e) {
+          logError(`attach monitor actor to backgroundGroup failed: ${e}`);
+        }
       } else {
-        Main.layoutManager._backgroundGroup.add_child(monitorActor.actor);
+        // Fallback: attach to uiGroup to avoid crashes on GNOME changes
+        try {
+          Main.layoutManager.uiGroup.add_child(monitorActor.actor);
+        } catch (e) {
+          logError(`attach monitor actor to fallback group failed: ${e}`);
+        }
       }
     }
     this.updateMonitorActors();
@@ -82,6 +110,10 @@ export class MonitorManager {
 
     for (let i = this.monitorActors.length - 1; i >= 0; i--) {
       const monitorActor = this.monitorActors[i];
+      if (!monitorActor?.actor || monitorActor.actor.is_finalized?.()) {
+        this.monitorActors.splice(i, 1);
+        continue;
+      }
       if (
         !monitors.find(
           (m: any) =>
@@ -89,7 +121,11 @@ export class MonitorManager {
         )
       ) {
         monitorActor.particles = [];
-        monitorActor.actor.destroy();
+        try {
+          monitorActor.actor.destroy();
+        } catch (e) {
+          logError(`destroy monitor actor failed: ${e}`);
+        }
         this.monitorActors.splice(i, 1);
       }
     }
@@ -117,8 +153,15 @@ export class MonitorManager {
         this.attachMonitorActors();
       } else {
         monitorActor.monitor = monitor;
-        monitorActor.actor.set_size(monitor.width, monitor.height);
-        monitorActor.actor.set_position(monitor.x, monitor.y);
+        if (!monitorActor.actor || monitorActor.actor.is_finalized?.()) {
+          continue;
+        }
+        try {
+          monitorActor.actor.set_size(monitor.width, monitor.height);
+          monitorActor.actor.set_position(monitor.x, monitor.y);
+        } catch (e) {
+          logError(`update monitor actor geometry failed: ${e}`);
+        }
       }
     }
   }
@@ -132,10 +175,11 @@ export class MonitorManager {
         monitorActor.particles.forEach((p) => {
           if (p && !p.is_finalized?.()) {
             try {
+              (p as any)._weatherDisposed = true;
               p.remove_all_transitions();
               p.destroy();
             } catch (e) {
-              // Particle already destroyed
+              logError(`destroy particle on monitor destroy failed: ${e}`);
             }
           }
         });
@@ -144,7 +188,7 @@ export class MonitorManager {
           try {
             monitorActor.actor.destroy();
           } catch (e) {
-            // Actor already destroyed
+            logError(`destroy monitor actor failed: ${e}`);
           }
         }
       }
@@ -167,13 +211,19 @@ export class MonitorManager {
       return;
     }
 
+    if (!monitorActor.actor || monitorActor.actor.is_finalized?.()) {
+      monitorActor.particles = [];
+      return;
+    }
+
     monitorActor.particles.forEach((p) => {
       if (p && !p.is_finalized?.()) {
         try {
+          (p as any)._weatherDisposed = true;
           p.remove_all_transitions();
           p.destroy();
         } catch (e) {
-          // Particle already destroyed
+          logError(`destroy particle on monitor clear particles failed: ${e}`);
         }
       }
     });

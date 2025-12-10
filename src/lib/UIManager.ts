@@ -58,6 +58,7 @@ export const WeatherToggle = GObject.registerClass(
       this._snowButton = new St.Button({
         style_class: "icon-button",
         can_focus: true,
+        toggle_mode: true,
         icon_name: "weather-snow-symbolic",
         label_actor: snowLabel,
         checked: false,
@@ -86,6 +87,7 @@ export const WeatherToggle = GObject.registerClass(
       this._rainButton = new St.Button({
         style_class: "icon-button",
         can_focus: true,
+        toggle_mode: true,
         icon_name: "weather-showers-symbolic",
         label_actor: rainLabel,
         checked: false,

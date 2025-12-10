@@ -1,6 +1,7 @@
 // @ts-nocheck
 import Clutter from "gi://Clutter";
 import St from "gi://St";
+import { logError } from "./Debug.js";
 /**
  * Management of particle creation and animation
  */
@@ -65,6 +66,7 @@ export class ParticleManager {
         }
         catch (e) {
             // Fallback to simple widget if emoji causes issues
+            logError(`createParticle fallback: ${e}`);
             particle = new St.Widget({
                 style: `background-color: ${type === "snow"
                     ? this.settings.get_string("snow-color")
@@ -110,6 +112,7 @@ export class ParticleManager {
         }
         catch (e) {
             // If emoji update fails, keep existing style
+            logError(`updateParticleStyle failed: ${e}`);
         }
     }
     /**
@@ -165,6 +168,7 @@ export class ParticleManager {
                         }
                     }
                     catch (e) {
+                        logError(`animateSingleParticle parent check failed: ${e}`);
                         return;
                     }
                     this.onAnimationFrame(particleRef, monitorActorRef, screenHeight, baseDuration);
@@ -172,7 +176,7 @@ export class ParticleManager {
             });
         }
         catch (e) {
-            // Animation failed, particle may be destroyed
+            logError(`animateSingleParticle failed: ${e}`);
         }
     }
     /**
@@ -211,7 +215,7 @@ export class ParticleManager {
             }
         }
         catch (e) {
-            // If check fails, assume incorrect type
+            logError(`isCorrectType check failed: ${e}`);
             return false;
         }
         return false;
