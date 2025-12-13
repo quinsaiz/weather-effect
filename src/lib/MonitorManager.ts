@@ -151,7 +151,7 @@ export class MonitorManager {
         this.attachMonitorActors();
       } else {
         monitorActor.monitor = monitor;
-        if (!monitorActor.actor || monitorActor.actor.is_finalized?.()) {
+        if (!monitorActor.actor || monitorActor.actor.is_finalized?.() || !monitor) {
           continue;
         }
         try {
@@ -185,6 +185,7 @@ export class MonitorManager {
         if (monitorActor.actor && !monitorActor.actor.is_finalized?.()) {
           try {
             monitorActor.actor.destroy();
+            monitorActor.actor = null;
           } catch (e) {
             logError(`destroy monitor actor failed: ${e}`);
           }
