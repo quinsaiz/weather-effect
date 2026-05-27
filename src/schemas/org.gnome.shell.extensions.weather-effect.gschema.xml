@@ -10,6 +10,11 @@
       <summary>Display mode</summary>
       <description>Where to render the effect: only on wallpaper background or as full-screen overlay.</description>
     </key>
+    <key name="active" type="b">
+      <default>true</default>
+      <summary>Extension Active</summary>
+      <description>Whether the effect is currently active (toggled on).</description>
+    </key>
     <key name="effect-type" type="s">
       <default>"snow"</default>
       <choices>

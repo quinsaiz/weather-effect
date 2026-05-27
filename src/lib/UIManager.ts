@@ -36,7 +36,12 @@ export const WeatherToggle = GObject.registerClass(
 
       this._settings = settings;
 
-      this.checked = true;
+      this.checked = this._settings.get_boolean("active");
+      this.connect("notify::checked", () => {
+        if (this._settings) {
+          this._settings.set_boolean("active", this.checked);
+        }
+      });
       const effectType: EffectType = this._settings.get_string("effect-type");
       this.iconName =
         effectType === "snow"

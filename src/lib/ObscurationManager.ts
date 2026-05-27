@@ -24,73 +24,68 @@ export class ObscurationManager {
       return false;
     }
 
-    try {
-      const activeWs = global.workspace_manager.get_active_workspace();
-      if (!activeWs) {
-        return false;
-      }
-
-      const workArea = {
-        x1: monitor.x,
-        y1: monitor.y,
-        x2: monitor.x + monitor.width,
-        y2: monitor.y + monitor.height,
-      };
-
-      const windowActors = global.get_window_actors();
-      if (!windowActors) {
-        return false;
-      }
-
-      const windows = windowActors
-        .map((actor: any) => {
-          try {
-            return actor?.meta_window as Meta.Window;
-          } catch (e) {
-            return null;
-          }
-        })
-        .filter(
-          (w): w is Meta.Window =>
-            w !== null &&
-            !w.minimized &&
-            w.get_workspace() === activeWs &&
-            w.get_monitor() === monitor.index &&
-            w.get_window_type() === Meta.WindowType.NORMAL,
-        );
-
-      if (windows.some((w) => w.is_fullscreen())) {
-        return true;
-      }
-
-      const rects = windows
-        .map((w) => {
-          if (!w) return null;
-          const r = w.get_frame_rect();
-          if (!r) return null;
-          const x1 = Math.max(r.x, workArea.x1);
-          const y1 = Math.max(r.y, workArea.y1);
-          const x2 = Math.min(r.x + r.width, workArea.x2);
-          const y2 = Math.min(r.y + r.height, workArea.y2);
-          return x2 > x1 && y2 > y1 ? { x1, y1, x2, y2 } : null;
-        })
-        .filter(
-          (r): r is { x1: number; y1: number; x2: number; y2: number } =>
-            r !== null && r.x2 > r.x1 && r.y2 > r.y1,
-        );
-
-      if (!rects || rects.length === 0) {
-        return false;
-      }
-
-      const covered = this._rectUnionArea(rects);
-      const area = monitor.width * monitor.height;
-      const ratio = covered / area;
-      return ratio >= 0.95;
-    } catch (e) {
-      logError(`isMonitorObscured failed for monitor ${monitor.index}: ${e}`);
+    const activeWs = global.workspace_manager.get_active_workspace();
+    if (!activeWs) {
       return false;
     }
+
+    const workArea = {
+      x1: monitor.x,
+      y1: monitor.y,
+      x2: monitor.x + monitor.width,
+      y2: monitor.y + monitor.height,
+    };
+
+    const windowActors = global.get_window_actors();
+    if (!windowActors) {
+      return false;
+    }
+
+    const windows = windowActors
+      .map((actor: any) => {
+        try {
+          return actor?.meta_window as Meta.Window;
+        } catch (e) {
+          return null;
+        }
+      })
+      .filter(
+        (w): w is Meta.Window =>
+          w !== null &&
+          !w.minimized &&
+          w.get_workspace() === activeWs &&
+          w.get_monitor() === monitor.index &&
+          w.get_window_type() === Meta.WindowType.NORMAL,
+      );
+
+    if (windows.some((w) => w.is_fullscreen())) {
+      return true;
+    }
+
+    const rects = windows
+      .map((w) => {
+        if (!w) return null;
+        const r = w.get_frame_rect();
+        if (!r) return null;
+        const x1 = Math.max(r.x, workArea.x1);
+        const y1 = Math.max(r.y, workArea.y1);
+        const x2 = Math.min(r.x + r.width, workArea.x2);
+        const y2 = Math.min(r.y + r.height, workArea.y2);
+        return x2 > x1 && y2 > y1 ? { x1, y1, x2, y2 } : null;
+      })
+      .filter(
+        (r): r is { x1: number; y1: number; x2: number; y2: number } =>
+          r !== null && r.x2 > r.x1 && r.y2 > r.y1,
+      );
+
+    if (!rects || rects.length === 0) {
+      return false;
+    }
+
+    const covered = this._rectUnionArea(rects);
+    const area = monitor.width * monitor.height;
+    const ratio = covered / area;
+    return ratio >= 0.95;
   }
 
   /**
@@ -109,43 +104,30 @@ export class ObscurationManager {
     const mode: DisplayMode = this.settings.get_string("display-mode");
 
     if (mode === "screen") {
-      try {
-        const activeWs = global.workspace_manager.get_active_workspace();
-        if (!activeWs) return checked;
+      const activeWs = global.workspace_manager.get_active_workspace();
+      if (!activeWs) return checked;
 
-        const windowActors = global.get_window_actors();
-        if (!windowActors) return checked;
+      const windowActors = global.get_window_actors();
+      if (!windowActors) return checked;
 
-        const windows = windowActors
-          .map((actor: any) => {
-            try {
-              return actor?.meta_window as Meta.Window;
-            } catch {
-              return null;
-            }
-          })
-          .filter(
-            (w): w is Meta.Window =>
-              w !== null &&
-              !w.minimized &&
-              w.get_workspace() === activeWs &&
-              w.get_monitor() === monitorActor.monitor.index &&
-              w.get_window_type() === Meta.WindowType.NORMAL,
-          );
-
-        const pauseOnFullscreen = this.settings.get_boolean(
-          "pause-on-fullscreen",
+      const windows = windowActors
+        .map((actor: any) => actor?.meta_window as Meta.Window)
+        .filter(
+          (w): w is Meta.Window =>
+            w !== null &&
+            !w.minimized &&
+            w.get_workspace() === activeWs &&
+            w.get_monitor() === monitorActor.monitor.index &&
+            w.get_window_type() === Meta.WindowType.NORMAL,
         );
-        if (pauseOnFullscreen && windows.some((w) => w.is_fullscreen()))
-          return false;
 
-        return checked;
-      } catch (e) {
-        logError(
-          `canRunOnMonitor screen-mode check failed on monitor ${monitorActor.monitor.index}: ${e}`,
-        );
-        return checked;
-      }
+      const pauseOnFullscreen = this.settings.get_boolean(
+        "pause-on-fullscreen",
+      );
+      if (pauseOnFullscreen && windows.some((w) => w.is_fullscreen()))
+        return false;
+
+      return checked;
     }
 
     if (isOverviewVisible) return false;
