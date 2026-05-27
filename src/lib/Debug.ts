@@ -5,7 +5,5 @@ export function logDebug(msg: string) {
 }
 
 export function logError(msg: string) {
-  globalThis.logError
-    ? globalThis.logError(`[Weather Effect] ${msg}`)
-    : log(`[Weather Effect][Error] ${msg}`);
+  log(`[Weather Effect][Error] ${msg}`);
 }

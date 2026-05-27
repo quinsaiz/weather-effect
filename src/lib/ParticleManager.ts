@@ -1,7 +1,7 @@
 import Clutter from "gi://Clutter";
 import St from "gi://St";
 import { MonitorActor } from "./MonitorManager.js";
-import { logDebug, logError } from "./Debug.js";
+import { logError } from "./Debug.js";
 
 type EffectType = "snow" | "rain";
 
@@ -14,7 +14,7 @@ export class ParticleManager {
     particle: St.Widget,
     monitorActor: MonitorActor,
     screenHeight: number,
-    baseDuration: number
+    baseDuration: number,
   ) => void;
 
   constructor(
@@ -23,8 +23,8 @@ export class ParticleManager {
       particle: St.Widget,
       monitorActor: MonitorActor,
       screenHeight: number,
-      baseDuration: number
-    ) => void
+      baseDuration: number,
+    ) => void,
   ) {
     this.settings = settings;
     this.onAnimationFrame = onAnimationFrame;
@@ -36,7 +36,7 @@ export class ParticleManager {
   createParticle(
     type: EffectType,
     monitorActor: MonitorActor,
-    screenWidth: number
+    screenWidth: number,
   ): St.Widget {
     if (!this.settings || !monitorActor || !monitorActor.actor) {
       throw new Error("Invalid parameters for createParticle");
@@ -56,7 +56,7 @@ export class ParticleManager {
           particle = new St.Label({
             text: snowEmoji,
             style: `font-size: ${size}px; color: ${this.settings.get_string(
-              "snow-color"
+              "snow-color",
             )};`,
             x: safeX,
             y: -20,
@@ -64,7 +64,7 @@ export class ParticleManager {
         } else {
           particle = new St.Widget({
             style: `background-color: ${this.settings.get_string(
-              "snow-color"
+              "snow-color",
             )}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`,
             x: safeX,
             y: -20,
@@ -75,7 +75,7 @@ export class ParticleManager {
           particle = new St.Label({
             text: rainEmoji,
             style: `font-size: ${size}px; color: ${this.settings.get_string(
-              "rain-color"
+              "rain-color",
             )};`,
             x: safeX,
             y: -20,
@@ -83,15 +83,12 @@ export class ParticleManager {
         } else {
           particle = new St.Widget({
             style: `background-color: ${this.settings.get_string(
-              "rain-color"
+              "rain-color",
             )}; width: ${size / 2}px; height: ${size * 2}px;`,
             x: safeX,
             y: -20,
           });
         }
-      }
-      if (monitorActor.actor && !(monitorActor.actor as any)._isDestroyedByGnome) {
-        monitorActor.actor.add_child(particle);
       }
     } catch (e) {
       logError(`createParticle fallback: ${e}`);
@@ -104,15 +101,20 @@ export class ParticleManager {
         x: safeX,
         y: -20,
       });
-      if (monitorActor.actor && !(monitorActor.actor as any)._isDestroyedByGnome) {
-        monitorActor.actor.add_child(particle);
-      }
     }
+
+    if (
+      monitorActor.actor &&
+      !(monitorActor.actor as any)._isDestroyedByGnome
+    ) {
+      monitorActor.actor.add_child(particle);
+    }
+
     (particle as any)._isDestroyedByGnome = false;
     particle.connect("destroy", (actor: any) => {
       actor._isDestroyedByGnome = true;
     });
-    
+
     return particle;
   }
 
@@ -133,22 +135,22 @@ export class ParticleManager {
         if (snowEmoji && snowEmoji !== "" && particle instanceof St.Label) {
           particle.text = snowEmoji;
           particle.style = `font-size: ${size}px; color: ${this.settings.get_string(
-            "snow-color"
+            "snow-color",
           )};`;
         } else if (!(particle instanceof St.Label)) {
           particle.style = `background-color: ${this.settings.get_string(
-            "snow-color"
+            "snow-color",
           )}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`;
         }
       } else {
         if (rainEmoji && rainEmoji !== "" && particle instanceof St.Label) {
           particle.text = rainEmoji;
           particle.style = `font-size: ${size}px; color: ${this.settings.get_string(
-            "rain-color"
+            "rain-color",
           )};`;
         } else if (!(particle instanceof St.Label)) {
           particle.style = `background-color: ${this.settings.get_string(
-            "rain-color"
+            "rain-color",
           )}; width: ${size / 2}px; height: ${size * 2}px;`;
         }
       }
@@ -180,7 +182,7 @@ export class ParticleManager {
     particle: any,
     monitorActor: MonitorActor,
     screenHeight: number,
-    baseDuration: number
+    baseDuration: number,
   ) {
     if (!particle || !monitorActor || screenHeight <= 0 || baseDuration <= 0) {
       return;
@@ -226,7 +228,7 @@ export class ParticleManager {
             particleRef,
             monitorActorRef,
             screenHeight,
-            baseDuration
+            baseDuration,
           );
         },
       });

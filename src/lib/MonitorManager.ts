@@ -2,7 +2,7 @@ import Clutter from "gi://Clutter";
 import St from "gi://St";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
-import { logDebug, logError } from "./Debug.js";
+import { logError } from "./Debug.js";
 
 export interface MonitorActor {
   actor: Clutter.Actor | null;
@@ -58,9 +58,7 @@ export class MonitorManager {
    * Attach actors to the scene
    */
   attachMonitorActors() {
-    if (!this.settings) {
-      return;
-    }
+    if (!this.settings) return;
 
     const mode = this.settings.get_string("display-mode") as
       | "screen"
@@ -70,38 +68,22 @@ export class MonitorManager {
       (Main.layoutManager as any)._backgroundGroup;
 
     for (const monitorActor of this.monitorActors) {
-      if (!monitorActor.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
+      if (
+        !monitorActor.actor ||
+        (monitorActor.actor as any)._isDestroyedByGnome
+      )
         continue;
-      }
 
-      try {
-        const parent = monitorActor.actor.get_parent();
-        if (parent) parent.remove_child(monitorActor.actor);
-      } catch (e) {
-        logError(`detach monitor actor failed: ${e}`);
-        continue;
-      }
+      const parent = monitorActor.actor.get_parent();
+      if (parent) parent.remove_child(monitorActor.actor);
 
-      if (mode === "screen") {
-        try {
-          Main.layoutManager.uiGroup.add_child(monitorActor.actor);
-        } catch (e) {
-          logError(`attach monitor actor to uiGroup failed: ${e}`);
-        }
-      } else if (backgroundGroup) {
-        try {
-          backgroundGroup.add_child(monitorActor.actor);
-        } catch (e) {
-          logError(`attach monitor actor to backgroundGroup failed: ${e}`);
-        }
+      if (mode === "screen" || !backgroundGroup) {
+        Main.layoutManager.uiGroup.add_child(monitorActor.actor);
       } else {
-        try {
-          Main.layoutManager.uiGroup.add_child(monitorActor.actor);
-        } catch (e) {
-          logError(`attach monitor actor to fallback group failed: ${e}`);
-        }
+        backgroundGroup.add_child(monitorActor.actor);
       }
     }
+
     this.updateMonitorActors();
   }
 
@@ -114,7 +96,11 @@ export class MonitorManager {
 
     for (let i = this.monitorActors.length - 1; i >= 0; i--) {
       const monitorActor = this.monitorActors[i];
-      if (!monitorActor?.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
+
+      if (
+        !monitorActor?.actor ||
+        (monitorActor.actor as any)._isDestroyedByGnome
+      ) {
         this.monitorActors.splice(i, 1);
         continue;
       }
@@ -135,50 +121,30 @@ export class MonitorManager {
       }
     }
 
-    for (let i = 0; i < monitors.length; i++) {
-      const monitor = monitors[i];
-      let monitorActor = this.monitorActors.find(
+    for (const monitor of monitors) {
+      const exists = this.monitorActors.find(
         (ma) => ma.monitor.x === monitor.x && ma.monitor.y === monitor.y,
       );
+      if (exists) continue;
 
-      if (!monitorActor) {
-        const actor = new Clutter.Actor({
-          width: monitor.width,
-          height: monitor.height,
-          reactive: false,
-          x: monitor.x,
-          y: monitor.y,
-        });
+      const actor = new Clutter.Actor({
+        width: monitor.width,
+        height: monitor.height,
+        reactive: false,
+        x: monitor.x,
+        y: monitor.y,
+      });
 
-        (actor as any)._isDestroyedByGnome = false;
-        actor.connect("destroy", (a: any) => {
-          a._isDestroyedByGnome = true;
-        });
+      (actor as any)._isDestroyedByGnome = false;
+      actor.connect("destroy", (a: any) => {
+        a._isDestroyedByGnome = true;
+      });
 
-        monitorActor = {
-          actor: actor,
-          monitor: monitor,
-          particles: [],
-        };
-        this.monitorActors.push(monitorActor);
-        needReattach = true;
-        monitorActor.monitor = monitor;
-
-        if (!monitorActor.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
-          continue;
-        }
-        try {
-          monitorActor.actor.set_size(monitor.width, monitor.height);
-          monitorActor.actor.set_position(monitor.x, monitor.y);
-        } catch (e) {
-          logError(`update monitor actor geometry failed: ${e}`);
-        }
-      }
-
-      if (needReattach) {
-        this.attachMonitorActors();
-      }
+      this.monitorActors.push({ actor, monitor, particles: [] });
+      needReattach = true;
     }
+
+    if (needReattach) this.attachMonitorActors();
   }
 
   /**
@@ -199,7 +165,10 @@ export class MonitorManager {
           }
         });
         monitorActor.particles = [];
-        if (monitorActor.actor && !(monitorActor.actor as any)._isDestroyedByGnome) {
+        if (
+          monitorActor.actor &&
+          !(monitorActor.actor as any)._isDestroyedByGnome
+        ) {
           try {
             monitorActor.actor.destroy();
             monitorActor.actor = null;
@@ -227,7 +196,10 @@ export class MonitorManager {
       return;
     }
 
-    if (!monitorActor.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
+    if (
+      !monitorActor.actor ||
+      (monitorActor.actor as any)._isDestroyedByGnome
+    ) {
       monitorActor.particles = [];
       return;
     }

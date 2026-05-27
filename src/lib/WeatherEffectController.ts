@@ -74,7 +74,6 @@ export class WeatherEffectController {
     // Sync state after boot
     this._bootTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
       this._syncToggleState();
-      logDebug("Checked state after boot");
       this._bootTimeout = null;
       return GLib.SOURCE_REMOVE;
     });
@@ -104,17 +103,13 @@ export class WeatherEffectController {
     this._overviewHandler = Main.overview.connect("showing", () => {
       if (!this._isEnabled) return;
       const mode: DisplayMode = this._settings.get_string("display-mode");
-      if (mode === "wallpaper") {
-        this._stopAnimation();
-        logDebug("Overview shown, animation stopped");
-      }
+      if (mode === "wallpaper") this._stopAnimation();
     });
 
     this._overviewHideHandler = Main.overview.connect("hidden", () => {
       if (!this._isEnabled) return;
       this._recomputeObscuration();
       this._syncToggleState();
-      logDebug("Overview hidden, syncing state");
     });
 
     // Toggle
@@ -132,7 +127,6 @@ export class WeatherEffectController {
               return GLib.SOURCE_REMOVE;
             }
             this._syncToggleState();
-            logDebug("Toggle state changed");
             this._toggleTimeout = null;
             return GLib.SOURCE_REMOVE;
           },
@@ -167,13 +161,7 @@ export class WeatherEffectController {
           } else {
             this._syncToggleState();
           }
-          logDebug("Display mode changed, actors reattached");
         }),
-      );
-    }
-
-    if (this._settings) {
-      this._settingsHandlers.push(
         this._settings.connect("changed::pause-on-fullscreen", () => {
           if (
             !this._isEnabled ||
@@ -183,7 +171,6 @@ export class WeatherEffectController {
             return;
           this._recomputeObscuration();
           this._syncToggleState();
-          logDebug("Pause on fullscreen setting changed");
         }),
       );
     }
@@ -193,7 +180,6 @@ export class WeatherEffectController {
       "monitors-changed",
       () => {
         if (!this._isEnabled) return;
-        logDebug("Monitors changed");
         this._monitorManager?.destroy();
         this._monitorManager?.createMonitorActors();
         this._recomputeObscuration();
@@ -205,7 +191,6 @@ export class WeatherEffectController {
       "workareas-changed",
       () => {
         if (!this._isEnabled) return;
-        logDebug("Workareas changed");
         this._monitorManager?.updateMonitorActors();
         this._recomputeObscuration();
         this._syncToggleState();
@@ -217,15 +202,12 @@ export class WeatherEffectController {
       "active-workspace-changed",
       () => {
         if (!this._isEnabled) return;
-        logDebug("Active workspace changed");
         const mode: DisplayMode = this._settings.get_string("display-mode");
-
         if (mode === "wallpaper") {
           this._monitorManager?.getMonitorActors().forEach((ma) => {
             this._monitorManager?.clearParticles(ma);
           });
         }
-
         this._debouncedRecompute();
       },
     );
@@ -288,69 +270,30 @@ export class WeatherEffectController {
    * Disconnect all handlers
    */
   private _disconnectAllHandlers() {
-    logDebug("Disconnecting all handlers");
-
     if (this._toggleHandler && this._indicator?.toggle) {
       try {
         this._indicator.toggle.disconnect(this._toggleHandler);
-      } catch (e) {
-        logDebug("Toggle handler already disconnected");
-      }
+      } catch (_e) {}
       this._toggleHandler = null;
     }
 
     const handlers = [
-      { handler: this._overviewHandler, obj: Main.overview, name: "overview" },
-      {
-        handler: this._overviewHideHandler,
-        obj: Main.overview,
-        name: "overviewHide",
-      },
-      {
-        handler: this._monitorsChangedHandler,
-        obj: Main.layoutManager,
-        name: "monitorsChanged",
-      },
-      {
-        handler: this._workareasChangedHandler,
-        obj: global.display,
-        name: "workareasChanged",
-      },
-      {
-        handler: this._workspaceChangedHandler,
-        obj: global.workspace_manager,
-        name: "workspaceChanged",
-      },
-      {
-        handler: this._windowCreatedHandler,
-        obj: global.display,
-        name: "windowCreated",
-      },
-      {
-        handler: this._windowHandler,
-        obj: global.window_manager,
-        name: "windowHandler",
-      },
-      {
-        handler: this._windowMinimizeHandler,
-        obj: global.window_manager,
-        name: "windowMinimize",
-      },
-      {
-        handler: this._windowUnminimizeHandler,
-        obj: global.window_manager,
-        name: "windowUnminimize",
-      },
+      { handler: this._overviewHandler, obj: Main.overview },
+      { handler: this._overviewHideHandler, obj: Main.overview },
+      { handler: this._monitorsChangedHandler, obj: Main.layoutManager },
+      { handler: this._workareasChangedHandler, obj: global.display },
+      { handler: this._workspaceChangedHandler, obj: global.workspace_manager },
+      { handler: this._windowCreatedHandler, obj: global.display },
+      { handler: this._windowHandler, obj: global.window_manager },
+      { handler: this._windowMinimizeHandler, obj: global.window_manager },
+      { handler: this._windowUnminimizeHandler, obj: global.window_manager },
     ];
 
-    handlers.forEach(({ handler, obj, name }) => {
+    handlers.forEach(({ handler, obj }) => {
       if (handler && obj) {
         try {
           obj.disconnect(handler);
-          logDebug(`Disconnected handler: ${name}`);
-        } catch (e) {
-          logDebug(`Handler ${name} already disconnected`);
-        }
+        } catch (_e) {}
       }
     });
 
@@ -358,11 +301,7 @@ export class WeatherEffectController {
       if (this._settings && id) {
         try {
           this._settings.disconnect(id);
-        } catch (e) {
-          logDebug(
-            "Settings handler already disconnected / Error disconnecting",
-          );
-        }
+        } catch (_e) {}
       }
     });
     this._settingsHandlers = [];
@@ -382,8 +321,6 @@ export class WeatherEffectController {
    * Destroy UI and managers
    */
   private _destroyUIAndManagers() {
-    logDebug("Destroying UI and managers");
-
     if (this._indicator) {
       this._indicator.destroy();
       this._indicator = null;
@@ -443,19 +380,7 @@ export class WeatherEffectController {
         return;
       }
 
-      let toggleChecked = false;
-      try {
-        if ((toggle as any)._isDestroyedByGnome) {
-          this._stopAnimation();
-          return;
-        }
-        toggleChecked = !!(toggle as any).checked;
-      } catch (e) {
-        logError(`toggle access failed: ${e}`);
-        this._stopAnimation();
-        return;
-      }
-
+      const toggleChecked = !!(toggle as any).checked;
       const mode: DisplayMode = this._settings.get_string("display-mode");
       let shouldRun = false;
 
@@ -473,10 +398,8 @@ export class WeatherEffectController {
       const isRunning = !!this.timeoutId;
 
       if (shouldRun && !isRunning) {
-        logDebug("Starting animation");
         this._startAnimation();
       } else if (!shouldRun && isRunning) {
-        logDebug("Stopping animation");
         this._stopAnimation();
       }
     } catch (e) {
@@ -597,27 +520,19 @@ export class WeatherEffectController {
       );
 
       for (const monitorActor of monitorActors) {
-        if (!monitorActor?.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
+        if (
+          !monitorActor?.actor ||
+          (monitorActor.actor as any)._isDestroyedByGnome
+        ) {
           continue;
         }
         if (!this._canRunOnMonitor(monitorActor)) {
-          if (monitorActor.particles.length > 0) {
-            logDebug(
-              `Clearing ${monitorActor.particles.length} particles on monitor ${monitorActor.monitor.index}`,
-            );
-            this._monitorManager.clearParticles(monitorActor);
-          }
+          this._monitorManager.clearParticles(monitorActor);
           continue;
         }
 
         const screenWidth = Math.max(1, monitorActor.monitor.width);
         const screenHeight = Math.max(1, monitorActor.monitor.height);
-
-        if (screenWidth <= 0 || screenHeight <= 0) continue;
-
-        if (!monitorActor.particles) {
-          monitorActor.particles = [];
-        }
 
         while (monitorActor.particles.length > particleCountPerMonitor) {
           const particle = monitorActor.particles.pop();
@@ -670,13 +585,6 @@ export class WeatherEffectController {
           }
 
           try {
-            if (
-              (particle as any)._isDestroyedByGnome ||
-              typeof particle.get_parent !== "function"
-            ) {
-              monitorActor.particles.splice(i, 1);
-              continue;
-            }
             if (!particle.get_parent()) {
               monitorActor.particles.splice(i, 1);
               continue;
@@ -735,90 +643,55 @@ export class WeatherEffectController {
     screenHeight: number,
     baseDuration: number,
   ) {
+    if (!this._isEnabled) return;
+    if (
+      !particle ||
+      (particle as any)._isDestroyedByGnome ||
+      (particle as any)._weatherDisposed
+    )
+      return;
+    if (!monitorActor?.actor || (monitorActor.actor as any)._isDestroyedByGnome)
+      return;
+    if (typeof (particle as any).get_parent !== "function") return;
+
+    const monitorActors = this._monitorManager!.getMonitorActors();
+    if (!monitorActors.includes(monitorActor)) return;
+
     try {
-      if (!this._isEnabled) {
+      particle.y = -20;
+      particle.x = Math.random() * Math.max(1, monitorActor.monitor.width);
+
+      const updatedType: EffectType = this._settings.get_string("effect-type");
+      const updatedSpeed = this._settings.get_int("speed");
+      const updatedBaseDuration =
+        this._particleManager!.getBaseDuration(updatedSpeed);
+      const mode: DisplayMode = this._settings.get_string("display-mode");
+
+      this._particleManager!.updateParticleStyle(particle, updatedType);
+
+      const toggle = this._getSafeToggle();
+      if (!toggle) {
+        this._safeDestroyParticle(particle, monitorActor);
         return;
       }
 
-      if (
-        !particle ||
-        (particle as any)._isDestroyedByGnome ||
-        (particle as any)._weatherDisposed
-      )
-        return;
-      if (
-        !monitorActor ||
-        !monitorActor.actor ||
-        (monitorActor.actor as any)._isDestroyedByGnome
-      )
-        return;
+      const canRun =
+        !!toggle.checked &&
+        (mode === "screen" || this._canRunOnMonitor(monitorActor));
 
-      try {
-        if (!monitorActor.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
-          return;
-        }
-      } catch (e) {
-        logError(`monitorActor actor check failed: ${e}`);
-        return;
-      }
-
-      if (typeof (particle as any).get_parent !== "function") {
-        return;
-      }
-
-      const monitorActors = this._monitorManager!.getMonitorActors();
-      if (!monitorActors.includes(monitorActor)) {
-        return;
-      }
-
-      try {
-        particle.y = -20;
-        const safeWidth = Math.max(1, monitorActor.monitor.width);
-        particle.x = Math.random() * safeWidth;
-
-        const updatedType: EffectType =
-          this._settings.get_string("effect-type");
-        const updatedSpeed = this._settings.get_int("speed");
-        const updatedBaseDuration =
-          this._particleManager!.getBaseDuration(updatedSpeed);
-        const mode: DisplayMode = this._settings.get_string("display-mode");
-
-        this._particleManager!.updateParticleStyle(particle, updatedType);
-
-        const toggle = this._getSafeToggle();
-        if (!toggle) {
-          this._safeDestroyParticle(particle, monitorActor);
-          return;
-        }
-
-        let toggleChecked = false;
-        try {
-          toggleChecked = !!toggle.checked;
-        } catch (e) {
-          logError(`toggle checked access failed: ${e}`);
-          toggleChecked = false;
-        }
-
-        const canRun =
-          toggleChecked &&
-          (mode === "screen" || this._canRunOnMonitor(monitorActor));
-
-        if (canRun) {
-          this._particleManager!.animateSingleParticle(
-            particle,
-            monitorActor,
-            screenHeight,
-            updatedBaseDuration,
-          );
-        } else {
-          this._safeDestroyParticle(particle, monitorActor);
-        }
-      } catch (e) {
-        logError(`onParticleAnimationComplete failed: ${e}`);
-        this._safeDestroyParticle(particle, monitorActor, true);
+      if (canRun) {
+        this._particleManager!.animateSingleParticle(
+          particle,
+          monitorActor,
+          screenHeight,
+          updatedBaseDuration,
+        );
+      } else {
+        this._safeDestroyParticle(particle, monitorActor);
       }
     } catch (e) {
-      logError(`onParticleAnimationComplete guard failed: ${e}`);
+      logError(`onParticleAnimationComplete failed: ${e}`);
+      this._safeDestroyParticle(particle, monitorActor, true);
     }
   }
 
@@ -850,17 +723,10 @@ export class WeatherEffectController {
    */
   private _getSafeToggle(): any | null {
     try {
-      if (!this._indicator || (this._indicator as any)._isDestroyedByGnome) return null;
+      if (!this._indicator || (this._indicator as any)._isDestroyedByGnome)
+        return null;
       const toggle = this._indicator.toggle;
       if (!toggle || (toggle as any)._isDestroyedByGnome) return null;
-
-      try {
-        if ((toggle as any)._isDestroyedByGnome || (toggle as any)._deleted) {
-          return null;
-        }
-      } catch (_e) {
-        return null;
-      }
       return toggle;
     } catch (_e) {
       return null;

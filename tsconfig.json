@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "allowJs": false
   },
-  "include": ["src/**/*.ts", "src/declarations.d.ts", "src/ambient.d.ts"],
+  "include": ["src/**/*.ts", "src/ambient.d.ts"],
 }

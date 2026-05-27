@@ -1,13 +1,11 @@
 import GObject from "gi://GObject";
 import Clutter from "gi://Clutter";
 import St from "gi://St";
-import * as Main from "resource:///org/gnome/shell/ui/main.js";
-
 import {
   QuickMenuToggle,
   SystemIndicator,
 } from "resource:///org/gnome/shell/ui/quickSettings.js";
-import { logDebug } from "./Debug.js";
+import { logDebug, logError } from "./Debug.js";
 
 type EffectType = "snow" | "rain";
 
@@ -77,7 +75,6 @@ export const WeatherToggle = GObject.registerClass(
         this.checked = true;
         this._updateButtons();
         this.iconName = "weather-snow-symbolic";
-        logDebug("Snow selected");
       });
 
       const rainBox = new St.BoxLayout({
@@ -106,7 +103,6 @@ export const WeatherToggle = GObject.registerClass(
         this.checked = true;
         this._updateButtons();
         this.iconName = "weather-showers-symbolic";
-        logDebug("Rain selected");
       });
 
       this.menu.box.add_child(this._buttonBox);
@@ -231,8 +227,6 @@ export const WeatherIndicator = GObject.registerClass(
     }
 
     destroy() {
-      logDebug("Destroying WeatherIndicator");
-
       if (this._settingsHandler && this._settings) {
         this._settings.disconnect(this._settingsHandler);
         this._settingsHandler = null;
