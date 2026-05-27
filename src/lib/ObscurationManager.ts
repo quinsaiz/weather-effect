@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Meta from "gi://Meta";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
@@ -58,7 +57,7 @@ export class ObscurationManager {
             !w.minimized &&
             w.get_workspace() === activeWs &&
             w.get_monitor() === monitor.index &&
-            w.get_window_type() === Meta.WindowType.NORMAL
+            w.get_window_type() === Meta.WindowType.NORMAL,
         );
 
       if (windows.some((w) => w.is_fullscreen())) {
@@ -78,7 +77,7 @@ export class ObscurationManager {
         })
         .filter(
           (r): r is { x1: number; y1: number; x2: number; y2: number } =>
-            r !== null && r.x2 > r.x1 && r.y2 > r.y1
+            r !== null && r.x2 > r.x1 && r.y2 > r.y1,
         );
 
       if (!rects || rects.length === 0) {
@@ -101,7 +100,7 @@ export class ObscurationManager {
   canRunOnMonitor(
     monitorActor: MonitorActor,
     toggle: any,
-    isOverviewVisible: boolean
+    isOverviewVisible: boolean,
   ): boolean {
     try {
       if (!this.settings || !monitorActor) {
@@ -113,7 +112,7 @@ export class ObscurationManager {
         if (!toggle || typeof toggle !== "object") {
           return false;
         }
-        if (toggle.is_finalized?.()) {
+        if (toggle._isDestroyedByGnome) {
           return false;
         }
         checked = !!(toggle as any).checked;
@@ -150,11 +149,11 @@ export class ObscurationManager {
                 !w.minimized &&
                 w.get_workspace() === activeWs &&
                 w.get_monitor() === monitorActor.monitor.index &&
-                w.get_window_type() === Meta.WindowType.NORMAL
+                w.get_window_type() === Meta.WindowType.NORMAL,
             );
 
           const pauseOnFullscreen = this.settings.get_boolean(
-            "pause-on-fullscreen"
+            "pause-on-fullscreen",
           );
           if (pauseOnFullscreen && windows.some((w) => w.is_fullscreen())) {
             return false;
@@ -163,7 +162,7 @@ export class ObscurationManager {
           return checked;
         } catch (e) {
           logError(
-            `canRunOnMonitor screen-mode window check failed on monitor ${monitorActor.monitor.index}: ${e}`
+            `canRunOnMonitor screen-mode window check failed on monitor ${monitorActor.monitor.index}: ${e}`,
           );
           return checked;
         }
@@ -205,7 +204,7 @@ export class ObscurationManager {
 
         if (wasObscured !== nowObscured) {
           logDebug(
-            `Monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`
+            `Monitor ${ma.monitor.index} obscured: ${wasObscured} -> ${nowObscured}`,
           );
           this.monitorObscuredCache.set(ma.monitor.index, nowObscured);
         }
@@ -226,7 +225,7 @@ export class ObscurationManager {
    * Compute union area of rectangles
    */
   private _rectUnionArea(
-    rects: { x1: number; y1: number; x2: number; y2: number }[]
+    rects: { x1: number; y1: number; x2: number; y2: number }[],
   ): number {
     const events: { x: number; y1: number; y2: number; type: number }[] = [];
 

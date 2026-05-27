@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Clutter from "gi://Clutter";
 import St from "gi://St";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
@@ -6,7 +5,7 @@ import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import { logDebug, logError } from "./Debug.js";
 
 export interface MonitorActor {
-  actor: Clutter.Actor;
+  actor: Clutter.Actor | null;
   monitor: any;
   particles: St.Widget[];
 }
@@ -39,12 +38,18 @@ export class MonitorManager {
         y: monitor.y,
       });
 
+      (actor as any)._isDestroyedByGnome = false;
+      actor.connect("destroy", (a: any) => {
+        a._isDestroyedByGnome = true;
+      });
+
       this.monitorActors.push({
         actor: actor,
         monitor: monitor,
         particles: [],
       });
     }
+
     this.attachMonitorActors();
     return this.monitorActors;
   }
@@ -65,7 +70,7 @@ export class MonitorManager {
       (Main.layoutManager as any)._backgroundGroup;
 
     for (const monitorActor of this.monitorActors) {
-      if (!monitorActor.actor || monitorActor.actor.is_finalized?.()) {
+      if (!monitorActor.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
         continue;
       }
 
@@ -105,19 +110,21 @@ export class MonitorManager {
    */
   updateMonitorActors() {
     const monitors = Main.layoutManager.monitors;
+    let needReattach = false;
 
     for (let i = this.monitorActors.length - 1; i >= 0; i--) {
       const monitorActor = this.monitorActors[i];
-      if (!monitorActor?.actor || monitorActor.actor.is_finalized?.()) {
+      if (!monitorActor?.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
         this.monitorActors.splice(i, 1);
         continue;
       }
-      if (
-        !monitors.find(
-          (m: any) =>
-            m.x === monitorActor.monitor.x && m.y === monitorActor.monitor.y
-        )
-      ) {
+
+      const exists = monitors.find(
+        (m: any) =>
+          m.x === monitorActor.monitor.x && m.y === monitorActor.monitor.y,
+      );
+
+      if (!exists) {
         monitorActor.particles = [];
         try {
           monitorActor.actor.destroy();
@@ -131,7 +138,7 @@ export class MonitorManager {
     for (let i = 0; i < monitors.length; i++) {
       const monitor = monitors[i];
       let monitorActor = this.monitorActors.find(
-        (ma) => ma.monitor.x === monitor.x && ma.monitor.y === monitor.y
+        (ma) => ma.monitor.x === monitor.x && ma.monitor.y === monitor.y,
       );
 
       if (!monitorActor) {
@@ -142,16 +149,22 @@ export class MonitorManager {
           x: monitor.x,
           y: monitor.y,
         });
+
+        (actor as any)._isDestroyedByGnome = false;
+        actor.connect("destroy", (a: any) => {
+          a._isDestroyedByGnome = true;
+        });
+
         monitorActor = {
           actor: actor,
           monitor: monitor,
           particles: [],
         };
         this.monitorActors.push(monitorActor);
-        this.attachMonitorActors();
-      } else {
+        needReattach = true;
         monitorActor.monitor = monitor;
-        if (!monitorActor.actor || monitorActor.actor.is_finalized?.() || !monitor) {
+
+        if (!monitorActor.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
           continue;
         }
         try {
@@ -160,6 +173,10 @@ export class MonitorManager {
         } catch (e) {
           logError(`update monitor actor geometry failed: ${e}`);
         }
+      }
+
+      if (needReattach) {
+        this.attachMonitorActors();
       }
     }
   }
@@ -171,7 +188,7 @@ export class MonitorManager {
     for (const monitorActor of this.monitorActors) {
       if (monitorActor) {
         monitorActor.particles.forEach((p) => {
-          if (p && !p.is_finalized?.()) {
+          if (p && !(p as any)._isDestroyedByGnome) {
             try {
               (p as any)._weatherDisposed = true;
               p.remove_all_transitions();
@@ -182,7 +199,7 @@ export class MonitorManager {
           }
         });
         monitorActor.particles = [];
-        if (monitorActor.actor && !monitorActor.actor.is_finalized?.()) {
+        if (monitorActor.actor && !(monitorActor.actor as any)._isDestroyedByGnome) {
           try {
             monitorActor.actor.destroy();
             monitorActor.actor = null;
@@ -210,13 +227,13 @@ export class MonitorManager {
       return;
     }
 
-    if (!monitorActor.actor || monitorActor.actor.is_finalized?.()) {
+    if (!monitorActor.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
       monitorActor.particles = [];
       return;
     }
 
     monitorActor.particles.forEach((p) => {
-      if (p && !p.is_finalized?.()) {
+      if (p && !(p as any)._isDestroyedByGnome) {
         try {
           (p as any)._weatherDisposed = true;
           p.remove_all_transitions();

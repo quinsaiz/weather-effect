@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Clutter from "gi://Clutter";
 import St from "gi://St";
 import { MonitorActor } from "./MonitorManager.js";
@@ -91,7 +90,7 @@ export class ParticleManager {
           });
         }
       }
-      if (monitorActor.actor && !monitorActor.actor.is_finalized?.()) {
+      if (monitorActor.actor && !(monitorActor.actor as any)._isDestroyedByGnome) {
         monitorActor.actor.add_child(particle);
       }
     } catch (e) {
@@ -105,10 +104,15 @@ export class ParticleManager {
         x: safeX,
         y: -20,
       });
-      if (monitorActor.actor && !monitorActor.actor.is_finalized?.()) {
+      if (monitorActor.actor && !(monitorActor.actor as any)._isDestroyedByGnome) {
         monitorActor.actor.add_child(particle);
       }
     }
+    (particle as any)._isDestroyedByGnome = false;
+    particle.connect("destroy", (actor: any) => {
+      actor._isDestroyedByGnome = true;
+    });
+    
     return particle;
   }
 
@@ -116,7 +120,7 @@ export class ParticleManager {
    * Update particle style
    */
   updateParticleStyle(particle: any, type: EffectType) {
-    if (!this.settings || !particle || particle.is_finalized?.()) {
+    if (!this.settings || !particle || (particle as any)._isDestroyedByGnome) {
       return;
     }
 
@@ -183,9 +187,9 @@ export class ParticleManager {
     }
 
     if (
-      particle.is_finalized?.() ||
+      (particle as any)._isDestroyedByGnome ||
       !monitorActor.actor ||
-      monitorActor.actor.is_finalized?.()
+      (monitorActor.actor as any)._isDestroyedByGnome
     ) {
       return;
     }
@@ -203,10 +207,10 @@ export class ParticleManager {
         onComplete: () => {
           if (
             !particleRef ||
-            particleRef.is_finalized?.() ||
+            (particleRef as any)._isDestroyedByGnome ||
             !monitorActorRef ||
             !monitorActorRef.actor ||
-            monitorActorRef.actor.is_finalized?.()
+            (monitorActorRef.actor as any)._isDestroyedByGnome
           ) {
             return;
           }
@@ -235,7 +239,7 @@ export class ParticleManager {
    * Check if particle is of the correct type
    */
   isCorrectType(particle: any, type: EffectType): boolean {
-    if (!this.settings || !particle || particle.is_finalized?.()) {
+    if (!this.settings || !particle || (particle as any)._isDestroyedByGnome) {
       return false;
     }
 

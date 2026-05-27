@@ -1,4 +1,3 @@
-// @ts-nocheck
 import GObject from "gi://GObject";
 import Clutter from "gi://Clutter";
 import St from "gi://St";
@@ -31,6 +30,12 @@ export const WeatherToggle = GObject.registerClass(
         iconName: "weather-snow-symbolic",
         toggleMode: true,
       });
+
+      this._isDestroyedByGnome = false;
+      this.connect("destroy", (actor: any) => {
+        actor._isDestroyedByGnome = true;
+      });
+
       this._settings = settings;
 
       this.checked = true;
@@ -116,7 +121,7 @@ export const WeatherToggle = GObject.registerClass(
             effectType === "snow"
               ? "weather-snow-symbolic"
               : "weather-showers-symbolic";
-        }
+        },
       );
 
       this._updateButtons();
@@ -160,7 +165,7 @@ export const WeatherToggle = GObject.registerClass(
 
       super.destroy();
     }
-  }
+  },
 );
 
 /**
@@ -176,7 +181,13 @@ export const WeatherIndicator = GObject.registerClass(
 
     constructor(settings: any) {
       super();
-      this._indicator = this._addIndicator();
+
+      this._isDestroyedByGnome = false;
+      this.connect("destroy", (actor: any) => {
+        actor._isDestroyedByGnome = true;
+      });
+
+      this._indicator = (this as any)._addIndicator();
       this._indicator.icon_name = "weather-snow-symbolic";
       this._settings = settings;
 
@@ -186,10 +197,10 @@ export const WeatherIndicator = GObject.registerClass(
       this._updateIndicatorIcon();
       this._settingsHandler = this._settings.connect(
         "changed::effect-type",
-        () => this._updateIndicatorIcon()
+        () => this._updateIndicatorIcon(),
       );
       this._toggleHandler = this.toggle.connect("notify::checked", () =>
-        this._updateIndicatorIcon()
+        this._updateIndicatorIcon(),
       );
     }
 
@@ -199,7 +210,7 @@ export const WeatherIndicator = GObject.registerClass(
           !this._settings ||
           !this.toggle ||
           !this._indicator ||
-          this.toggle.is_finalized?.()
+          (this.toggle as any)._isDestroyedByGnome
         )
           return;
         const effectType: EffectType = this._settings.get_string("effect-type");
@@ -243,5 +254,5 @@ export const WeatherIndicator = GObject.registerClass(
 
       super.destroy();
     }
-  }
+  },
 );

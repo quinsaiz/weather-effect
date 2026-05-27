@@ -1,10 +1,9 @@
-// @ts-nocheck
 import Adw from "gi://Adw";
 import Gtk from "gi://Gtk";
 import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 
 export default class WeatherEffectPrefs extends ExtensionPreferences {
-  fillPreferencesWindow(window: any) {
+  fillPreferencesWindow(window: Adw.PreferencesWindow): Promise<void> {
     const settings = this.getSettings();
 
     const generalPage = new Adw.PreferencesPage({
@@ -166,6 +165,8 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
       settings.set_string("rain-emoji", value === "default" ? "" : value);
     });
     appearanceGroup.add(rainEmojiRow);
+
+    return Promise.resolve();
   }
 
   private _bindNumberRow({

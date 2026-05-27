@@ -1,16 +1,14 @@
-<h1 align="center">Weather Effect GNOME Extension</h1>
+# Weather Effect GNOME Extension
 
-<p align="center">
-    <img src="https://img.shields.io/badge/GNOME-Shell-blue?style=for-the-badge&logo=gnome" alt="GNOME Shell"/>
-    <img src="https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge" alt="License"/>
-    <img src="https://img.shields.io/badge/Version-2.0-orange?style=for-the-badge" alt="Version"/>
-</p>
+![GNOME Shell](https://img.shields.io/badge/GNOME-Shell-blue?style=for-the-badge&logo=gnome)
+![License](https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.0-orange?style=for-the-badge)
 
 ## Description
 
 Weather Effect is a GNOME Shell extension that adds beautiful animated weather effects (snow or rain) to your desktop wallpaper or as a full-screen overlay. Enjoy the magic of falling snowflakes or raindrops on your GNOME desktop!
 
-### Key Features:
+### Key Features
 
 - ❄️ **Snow Effect**: Beautiful animated snowflakes falling on your desktop
 - 🌧️ **Rain Effect**: Realistic rain animation with customizable particles
@@ -55,19 +53,19 @@ If you want to build the extension from source code, follow these steps:
 - **npm** (comes with Node.js)
 - **glib-compile-schemas** (usually comes with GNOME development packages)
 
-#### Ubuntu/Debian:
+#### Ubuntu/Debian
 
 ```bash
 sudo apt install nodejs npm gir1.2-glib-2.0
 ```
 
-#### Fedora:
+#### Fedora
 
 ```bash
 sudo dnf install nodejs npm glib2-devel
 ```
 
-#### Arch:
+#### Arch
 
 ```bash
 sudo pacman -S nodejs npm glib2
@@ -156,7 +154,7 @@ The extension can be configured through the GNOME Extensions app settings:
 
 ### quinsaiz
 
-GitHub: https://github.com/quinsaiz
+GitHub: <https://github.com/quinsaiz>
 
 ## License
 
