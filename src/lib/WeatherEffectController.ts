@@ -50,7 +50,7 @@ export class WeatherEffectController {
    */
   enable() {
     logDebug("Starting extension");
-    
+
     this._isEnabled = true;
 
     // Initialize managers
@@ -645,6 +645,7 @@ export class WeatherEffectController {
           );
 
           if (particle) {
+            particle.y = Math.random() * screenHeight - 20;
             monitorActor.particles.push(particle);
             this._particleManager.animateSingleParticle(
               particle,
@@ -675,8 +676,20 @@ export class WeatherEffectController {
         }
 
         if (!this._particleManager.isCorrectType(particle, type)) {
-          particle.remove_all_transitions();
-          particle.destroy();
+          let currentX = 0;
+          let currentY = -20;
+
+          try {
+            currentX = particle.x;
+            currentY = particle.y;
+          } catch (_e) {}
+
+          try {
+            (particle as any)._weatherDisposed = true;
+            particle.remove_all_transitions();
+            particle.destroy();
+          } catch (_e) {}
+
           monitorActor.particles.splice(i, 1);
 
           if (!this._isEnabled) continue;
@@ -688,6 +701,9 @@ export class WeatherEffectController {
           );
 
           if (newParticle) {
+            newParticle.x = currentX;
+            newParticle.y = currentY;
+
             monitorActor.particles.push(newParticle);
             this._particleManager.animateSingleParticle(
               newParticle,

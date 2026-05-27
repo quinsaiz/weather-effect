@@ -163,7 +163,7 @@ export class ParticleManager {
   getBaseDuration(speed: number): number {
     switch (speed) {
       case 0:
-        return 3000;
+        return 3500;
       case 1:
         return 2000;
       case 2:
@@ -197,12 +197,18 @@ export class ParticleManager {
     const particleRef = particle;
     const monitorActorRef = monitorActor;
     const randomOffset = Math.random() * 500;
+    const totalDuration = baseDuration + randomOffset;
+    const startY = particle.y;
+    const targetY = screenHeight + 20;
+    const totalDistance = targetY + 20;
+    const distanceToTravel = Math.max(1, targetY - startY);
+    const actualDuration = (distanceToTravel / totalDistance) * totalDuration;
 
     try {
       particle.show();
       particle.ease({
-        y: screenHeight + 20,
-        duration: baseDuration + randomOffset,
+        y: targetY,
+        duration: actualDuration,
         mode: Clutter.AnimationMode.LINEAR,
         onComplete: () => {
           if (

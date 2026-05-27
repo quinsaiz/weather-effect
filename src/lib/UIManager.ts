@@ -5,7 +5,7 @@ import {
   QuickMenuToggle,
   SystemIndicator,
 } from "resource:///org/gnome/shell/ui/quickSettings.js";
-import { logDebug, logError } from "./Debug.js";
+import { logError } from "./Debug.js";
 
 type EffectType = "snow" | "rain";
 

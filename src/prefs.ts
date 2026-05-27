@@ -112,7 +112,7 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
 
     const appearancePage = new Adw.PreferencesPage({
       title: "Appearance",
-      icon_name: "preferences-desktop-theme-symbolic",
+      icon_name: "preferences-desktop-appearance-symbolic",
     });
     window.add(appearancePage);
 
