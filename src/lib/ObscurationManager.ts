@@ -62,6 +62,7 @@ export class ObscurationManager {
       return true;
     }
 
+    // Calculate rectangle coverage
     const rects = windows
       .map((w) => {
         if (!w) return null;
@@ -103,6 +104,7 @@ export class ObscurationManager {
     const checked: boolean = !!(toggle as any).checked;
     const mode: DisplayMode = this.settings.get_string("display-mode");
 
+    // Screen mode — check for fullscreen windows
     if (mode === "screen") {
       const activeWs = global.workspace_manager.get_active_workspace();
       if (!activeWs) return checked;
@@ -132,6 +134,7 @@ export class ObscurationManager {
 
     if (isOverviewVisible) return false;
 
+    // Wallpaper mode — check obscuration cache
     const obscured =
       this.monitorObscuredCache.get(monitorActor.monitor.index) ?? false;
     return !obscured && checked;

@@ -24,6 +24,11 @@
       <summary>Effect type</summary>
       <description>Select the weather effect: snow or rain.</description>
     </key>
+    <key name="show-in-quick-settings" type="b">
+      <default>true</default>
+      <summary>Show in Quick Settings</summary>
+      <description>Show the weather effect toggle button and icon in the Quick Settings panel.</description>
+    </key>
     <key name="pause-on-fullscreen" type="b">
       <default>true</default>
       <summary>Pause on fullscreen</summary>

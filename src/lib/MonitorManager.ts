@@ -94,6 +94,7 @@ export class MonitorManager {
     const monitors = Main.layoutManager.monitors;
     let needReattach = false;
 
+    // Remove actors for disconnected monitors
     for (let i = this.monitorActors.length - 1; i >= 0; i--) {
       const monitorActor = this.monitorActors[i];
 
@@ -121,6 +122,7 @@ export class MonitorManager {
       }
     }
 
+    // Add actors for new monitors
     for (const monitor of monitors) {
       const exists = this.monitorActors.find(
         (ma) => ma.monitor.x === monitor.x && ma.monitor.y === monitor.y,

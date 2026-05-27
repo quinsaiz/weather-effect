@@ -45,7 +45,6 @@ export class ParticleManager {
     const size = this.settings.get_int("particle-size");
     const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
     const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();
-
     const safeScreenWidth = Math.max(1, screenWidth);
     const safeX = Math.random() * safeScreenWidth;
 
@@ -114,7 +113,6 @@ export class ParticleManager {
     particle.connect("destroy", (actor: any) => {
       actor._isDestroyedByGnome = true;
     });
-
     return particle;
   }
 
@@ -198,8 +196,8 @@ export class ParticleManager {
 
     const particleRef = particle;
     const monitorActorRef = monitorActor;
-
     const randomOffset = Math.random() * 500;
+
     try {
       particle.show();
       particle.ease({

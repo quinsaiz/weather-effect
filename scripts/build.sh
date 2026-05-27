@@ -51,7 +51,6 @@ function build_extension() {
 	fi
 
 	rm -rf "$TMP_PACK"
-	#rm -rf "$DIST_DIR"
 }
 
 function install_extension() {

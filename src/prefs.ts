@@ -43,6 +43,17 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
     });
     generalGroup.add(modeRow);
 
+    const quickSettingsRow = new Adw.SwitchRow({
+      title: "Show in Quick Settings",
+      subtitle:
+        "Display the toggle button and icon in the Quick Settings panel",
+      active: settings.get_boolean("show-in-quick-settings"),
+    });
+    quickSettingsRow.connect("notify::active", (row: any) => {
+      settings.set_boolean("show-in-quick-settings", row.active);
+    });
+    generalGroup.add(quickSettingsRow);
+
     const pauseRow = new Adw.SwitchRow({
       title: "Pause on Fullscreen",
       subtitle:
