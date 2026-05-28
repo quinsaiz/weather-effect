@@ -37,8 +37,12 @@ export class WeatherEffectController {
   private _settingsHandlers: number[] = [];
   private _workspaceChangedHandler: number | null = null;
   private _windowCreatedHandler: number | null = null;
-  private _toggleHandler: number | null = null;
+  private _notifyFocusWindowHandler: number | null = null;
+  private _notifyFullscreenHandler: number | null = null;
+  private _grabOpBeginHandler: number | null = null;
+  private _grabDragTimeout: number | null = null;
   private _grabOpEndHandler: number | null = null;
+  private _toggleHandler: number | null = null;
   private _showInQsHandler: number | null = null;
 
   constructor(settings: any) {
@@ -334,8 +338,50 @@ export class WeatherEffectController {
       },
     );
 
+    this._notifyFocusWindowHandler = global.display.connect(
+      "notify::focus-window",
+      () => {
+        if (!this._isEnabled) return;
+        this._debouncedRecompute();
+      },
+    );
+
+    this._notifyFullscreenHandler = global.display.connect(
+      "in-fullscreen-changed",
+      () => {
+        if (!this._isEnabled) return;
+        this._debouncedRecompute();
+      },
+    );
+
+    this._grabOpBeginHandler = global.display.connect("grab-op-begin", () => {
+      if (!this._isEnabled) return;
+
+      if (this._grabDragTimeout) GLib.source_remove(this._grabDragTimeout);
+
+      this._grabDragTimeout = GLib.timeout_add(
+        GLib.PRIORITY_DEFAULT,
+        200,
+        () => {
+          if (!this._isEnabled) {
+            this._grabDragTimeout = null;
+            return GLib.SOURCE_REMOVE;
+          }
+          this._recomputeObscuration();
+          this._syncToggleState();
+          return GLib.SOURCE_CONTINUE;
+        },
+      );
+    });
+
     this._grabOpEndHandler = global.display.connect("grab-op-end", () => {
       if (!this._isEnabled) return;
+
+      if (this._grabDragTimeout) {
+        GLib.source_remove(this._grabDragTimeout);
+        this._grabDragTimeout = null;
+      }
+
       this._debouncedRecompute();
     });
   }
@@ -349,6 +395,7 @@ export class WeatherEffectController {
       this._toggleTimeout,
       this._displayModeTimeout,
       this._debounceTimeout,
+      this._grabDragTimeout,
     ];
 
     timeouts.forEach((timeout) => {
@@ -361,6 +408,7 @@ export class WeatherEffectController {
     this._toggleTimeout = null;
     this._displayModeTimeout = null;
     this._debounceTimeout = null;
+    this._grabDragTimeout = null;
   }
 
   /**
@@ -387,6 +435,9 @@ export class WeatherEffectController {
       { handler: this._windowHandler, obj: global.window_manager },
       { handler: this._windowMinimizeHandler, obj: global.window_manager },
       { handler: this._windowUnminimizeHandler, obj: global.window_manager },
+      { handler: this._notifyFocusWindowHandler, obj: global.display },
+      { handler: this._notifyFullscreenHandler, obj: global.display },
+      { handler: this._grabOpBeginHandler, obj: global.display },
       { handler: this._grabOpEndHandler, obj: global.display },
     ];
 
@@ -416,6 +467,9 @@ export class WeatherEffectController {
     this._windowHandler = null;
     this._windowMinimizeHandler = null;
     this._windowUnminimizeHandler = null;
+    this._notifyFocusWindowHandler = null;
+    this._notifyFullscreenHandler = null;
+    this._grabOpBeginHandler = null;
     this._grabOpEndHandler = null;
   }
 

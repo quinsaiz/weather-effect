@@ -218,7 +218,7 @@ export const WeatherIndicator = GObject.registerClass(
         let checked = false;
         try {
           checked = this.toggle.checked;
-        } catch (e) {
+        } catch (_e) {
           return;
         }
         this._indicator.icon_name = checked

@@ -2,11 +2,21 @@
 
 ![GNOME Shell](https://img.shields.io/badge/GNOME-Shell-blue?style=for-the-badge&logo=gnome)
 ![License](https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-2.0-orange?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.3-orange?style=for-the-badge)
 
 ## Description
 
 Weather Effect is a GNOME Shell extension that adds beautiful animated weather effects (snow or rain) to your desktop wallpaper or as a full-screen overlay. Enjoy the magic of falling snowflakes or raindrops on your GNOME desktop!
+
+## Preview
+
+### Snow Effect
+
+![Snow Effect Demo](demo/snow.gif)
+
+### Rain Effect
+
+![Rain Effect Demo](demo/rain.gif)
 
 ### Key Features
 
@@ -76,7 +86,7 @@ sudo pacman -S nodejs npm glib2
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/quinsaiz/weather-effect.git
+   git clone https://github.com/quinsaiz/weather-effect.git && \
    cd weather-effect
    ```
 
@@ -95,7 +105,21 @@ sudo pacman -S nodejs npm glib2
    This will:
 
    - Compile TypeScript files to JavaScript
-   - Create the extension archive (.zip) and install it
+   - Create the extension archive `.zip`
+
+   ---
+
+   **To compile and install the extension directly, run:**
+
+   ```bash
+   npm run install
+   ```
+
+   This will:
+
+   - Compile TypeScript files to JavaScript
+   - Create the extension archive `.zip`
+   - Install it into your local extensions directory
 
 ## Usage
 
@@ -105,36 +129,34 @@ sudo pacman -S nodejs npm glib2
    - Choose between **Snow** ❄️ or **Rain** 🌧️ using the horizontal selector buttons
 4. **Configure settings** (optional):
    - Open GNOME Extensions app
-   - Click the ⚙️ gear icon next to Weather Effect
+   - Find **Weather Effect** and click the settings icon.
    - Adjust particle count, size, speed, colors, and display mode
 
 ## Project Structure
 
 ```text
 weather-effect/
-│
-├── src/
-│   ├── extension.ts           # Main extension entry point
-│   ├── metadata.json          # Extension manifest
-│   ├── prefs.ts               # Preferences window
-│   └── lib/
-│       ├── WeatherEffectController.ts  # Main orchestrator
-│       ├── UIManager.ts                # Quick Settings UI components
-│       ├── MonitorManager.ts           # Monitor actor management
-│       ├── ObscurationManager.ts       # Window obscuration detection
-│       ├── ParticleManager.ts          # Particle creation & animation
-│       └── Debug.ts                    # Centralized logging
-│
-├── schemas/
-│   └── org.gnome.shell.extensions.weather-effect.gschema.xml
-│
+├── LICENSE
+├── package.json
+├── package-lock.json
+├── README.md
 ├── scripts/
-│   └── build.sh          # Build and installation script
-│
-├── package.json          # Dependencies & build scripts
-├── tsconfig.json         # TypeScript compiler options
-├── LICENSE               # GPLv3 License
-└── README.md             # This file
+│   └── build.sh                    # Build and installation script
+├── src/
+│   ├── ambient.d.ts                # Ambient type definitions for GJS
+│   ├── extension.ts                # Main extension entry point
+│   ├── metadata.json               # Extension manifest
+│   ├── prefs.ts                    # Preferences window
+│   ├── lib/
+│   │   ├── Debug.ts                # Centralized logging
+│   │   ├── MonitorManager.ts       # Monitor actor management
+│   │   ├── ObscurationManager.ts   # Window obscuration detection
+│   │   ├── ParticleManager.ts      # Particle creation & animation
+│   │   ├── UIManager.ts            # Quick Settings UI components
+│   │   └── WeatherEffectController.ts # Main orchestrator
+│   └── schemas/
+│       └── org.gnome.shell.extensions.weather-effect.gschema.xml # GSettings schema
+└── tsconfig.json                   # TypeScript compiler options
 ```
 
 ## Configuration
@@ -148,7 +170,7 @@ The extension can be configured through the GNOME Extensions app settings:
 - **Speed**: Slow, Medium, or Fast
 - **Snow Color**: White, Light Blue, or Silver
 - **Rain Color**: Gray or Dark Blue
-- **Custom Emojis**: Choose custom emoji or use default shapes
+- **Custom Emojis**: Choose emoji or use default shapes
 
 ## Author
 
@@ -159,13 +181,3 @@ GitHub: <https://github.com/quinsaiz>
 ## License
 
 This project is licensed under the [GPLv3 License](/LICENSE).
-
-## Support
-
-If you like this project, please give it a star on GitHub!
-
-[![GitHub stars](https://img.shields.io/github/stars/quinsaiz/weather-effect?style=social)](https://github.com/quinsaiz/weather-effect)
-
-## Contributing
-
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/quinsaiz/weather-effect/issues).

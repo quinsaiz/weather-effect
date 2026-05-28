@@ -45,20 +45,33 @@ export class ObscurationManager {
       .map((actor: any) => {
         try {
           return actor?.meta_window as Meta.Window;
-        } catch (e) {
+        } catch (_e) {
           return null;
         }
       })
-      .filter(
-        (w): w is Meta.Window =>
-          w !== null &&
-          !w.minimized &&
-          w.get_workspace() === activeWs &&
-          w.get_monitor() === monitor.index &&
-          w.get_window_type() === Meta.WindowType.NORMAL,
-      );
+      .filter((w): w is Meta.Window => {
+        if (!w) return false;
+        try {
+          return (
+            !w.minimized &&
+            w.get_workspace() === activeWs &&
+            w.get_monitor() === monitor.index &&
+            w.get_window_type() === Meta.WindowType.NORMAL
+          );
+        } catch (_e) {
+          return false;
+        }
+      });
 
-    if (windows.some((w) => w.is_fullscreen())) {
+    const hasFullscreen = windows.some((w) => {
+      try {
+        return w.is_fullscreen();
+      } catch (_e) {
+        return false;
+      }
+    });
+
+    if (hasFullscreen) {
       return true;
     }
 
@@ -114,20 +127,34 @@ export class ObscurationManager {
 
       const windows = windowActors
         .map((actor: any) => actor?.meta_window as Meta.Window)
-        .filter(
-          (w): w is Meta.Window =>
-            w !== null &&
-            !w.minimized &&
-            w.get_workspace() === activeWs &&
-            w.get_monitor() === monitorActor.monitor.index &&
-            w.get_window_type() === Meta.WindowType.NORMAL,
-        );
+        .filter((w): w is Meta.Window => {
+          if (!w) return false;
+          try {
+            return (
+              !w.minimized &&
+              w.get_workspace() === activeWs &&
+              w.get_monitor() === monitorActor.monitor.index &&
+              w.get_window_type() === Meta.WindowType.NORMAL
+            );
+          } catch (_e) {
+            return false;
+          }
+        });
 
       const pauseOnFullscreen = this.settings.get_boolean(
         "pause-on-fullscreen",
       );
-      if (pauseOnFullscreen && windows.some((w) => w.is_fullscreen()))
-        return false;
+
+      if (pauseOnFullscreen) {
+        const hasFullscreen = windows.some((w) => {
+          try {
+            return w.is_fullscreen();
+          } catch (_e) {
+            return false;
+          }
+        });
+        if (hasFullscreen) return false;
+      }
 
       return checked;
     }

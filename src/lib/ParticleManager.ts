@@ -91,6 +91,7 @@ export class ParticleManager {
       }
     } catch (e) {
       logError(`createParticle fallback: ${e}`);
+      
       particle = new St.Widget({
         style: `background-color: ${
           type === "snow"
