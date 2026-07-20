@@ -7,9 +7,9 @@ RED="\e[31m"
 BLUE="\e[34m"
 RESET="\e[0m"
 
-function info() { echo -e "${BLUE}[INFO]${RESET} $1"; }
-function success() { echo -e "${GREEN}[OK]${RESET} $1"; }
-function error() { echo -e "${RED}[ERROR]${RESET} $1"; }
+info() { echo -e "${BLUE}[INFO]${RESET} $1"; }
+success() { echo -e "${GREEN}[OK]${RESET} $1"; }
+error() { echo -e "${RED}[ERROR]${RESET} $1"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -19,7 +19,7 @@ SCHEMAS_DIR="$SRC_DIR/schemas"
 RELEASE_DIR="$ROOT_DIR/build"
 ZIP_NAME="weather-effect@quinsaiz.github.shell-extension.zip"
 
-function build_extension() {
+build_extension() {
 	mkdir -p "$RELEASE_DIR"
 
 	TMP_PACK="$RELEASE_DIR/tmp_pack"
@@ -51,16 +51,17 @@ function build_extension() {
 	fi
 
 	rm -rf "$TMP_PACK"
+	rm -rf "$DIST_DIR"
 }
 
-function install_extension() {
+install_extension() {
 	info "Installing extension..."
 	gnome-extensions install --force "$RELEASE_DIR/$ZIP_NAME" &&
 		success "Extension installed successfully! Restart GNOME Shell." ||
 		error "Failed to install extension!"
 }
 
-function uninstall_extension() {
+uninstall_extension() {
 	info "Uninstalling extension..."
 	gnome-extensions uninstall weather-effect@quinsaiz.github &&
 		success "Extension uninstalled successfully! Restart GNOME Shell." ||

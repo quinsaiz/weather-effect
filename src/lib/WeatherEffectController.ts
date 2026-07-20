@@ -5,14 +5,13 @@ import { WeatherIndicator } from "./UIManager.js";
 import { MonitorManager, MonitorActor } from "./MonitorManager.js";
 import { ObscurationManager } from "./ObscurationManager.js";
 import { ParticleManager } from "./ParticleManager.js";
-import { logDebug, logError } from "./Debug.js";
 
 type EffectType = "snow" | "rain";
 type DisplayMode = "wallpaper" | "screen";
 
 /**
  * Main controller for the extension.
- * Coordinates the different managers and handles lifecycle.
+ * Coordinates different managers and safely handles GNOME Shell lifecycle.
  */
 export class WeatherEffectController {
   private _settings: any;
@@ -22,39 +21,54 @@ export class WeatherEffectController {
   private _particleManager: ParticleManager | null = null;
   private _isEnabled: boolean = false;
 
+  // Centralized timeout tracking to prevent memory leaks
+  private _timeouts: Set<number> = new Set();
   private timeoutId: number | null = null;
-  private _bootTimeout: number | null = null;
   private _toggleTimeout: number | null = null;
   private _displayModeTimeout: number | null = null;
-  private _overviewHandler: number | null = null;
-  private _overviewHideHandler: number | null = null;
-  private _windowHandler: number | null = null;
-  private _windowMinimizeHandler: number | null = null;
-  private _windowUnminimizeHandler: number | null = null;
   private _debounceTimeout: number | null = null;
-  private _monitorsChangedHandler: number | null = null;
-  private _workareasChangedHandler: number | null = null;
-  private _settingsHandlers: number[] = [];
-  private _workspaceChangedHandler: number | null = null;
-  private _windowCreatedHandler: number | null = null;
-  private _notifyFocusWindowHandler: number | null = null;
-  private _notifyFullscreenHandler: number | null = null;
-  private _grabOpBeginHandler: number | null = null;
   private _grabDragTimeout: number | null = null;
-  private _grabOpEndHandler: number | null = null;
-  private _toggleHandler: number | null = null;
-  private _showInQsHandler: number | null = null;
 
   constructor(settings: any) {
     this._settings = settings;
   }
 
   /**
-   * Enable the extension
+   * Helper method to create a GLib timeout and automatically track its ID
+   * in the _timeouts set for clean removal upon disabling.
+   */
+  private _addTimeout(
+    priority: number,
+    interval: number,
+    callback: () => boolean,
+  ): number {
+    const id = GLib.timeout_add(priority, interval, () => {
+      const result = callback();
+      if (result === GLib.SOURCE_REMOVE) {
+        this._timeouts.delete(id);
+      }
+      return result;
+    });
+
+    this._timeouts.add(id);
+    return id;
+  }
+
+  /**
+   * Remove a specific tracked timeout safely.
+   */
+  private _removeTimeout(id: number | null): null {
+    if (id !== null && this._timeouts.has(id)) {
+      GLib.source_remove(id);
+      this._timeouts.delete(id);
+    }
+    return null;
+  }
+
+  /**
+   * Enable the extension.
    */
   enable() {
-    logDebug("Starting extension");
-
     this._isEnabled = true;
 
     // Initialize managers
@@ -65,7 +79,7 @@ export class WeatherEffectController {
       this._onParticleAnimationComplete.bind(this),
     );
 
-    // Create UI (only if show-in-quick-settings is enabled)
+    // Create UI if configured
     if (this._settings.get_boolean("show-in-quick-settings")) {
       this._createIndicator();
     }
@@ -76,36 +90,31 @@ export class WeatherEffectController {
       this._monitorManager.getMonitorActors(),
     );
 
-    // Set up event handlers
+    // Set up event handlers using connectObject
     this._setupEventHandlers();
 
     // Sync state after boot
-    this._bootTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+    this._addTimeout(GLib.PRIORITY_DEFAULT, 1000, () => {
+      if (!this._isEnabled) return GLib.SOURCE_REMOVE;
       this._syncToggleState();
-      this._bootTimeout = null;
       return GLib.SOURCE_REMOVE;
     });
   }
 
   /**
-   * Disable the extension
+   * Disable the extension.
    */
   disable() {
-    logDebug("Stopping extension");
-
     this._isEnabled = false;
 
     this._stopAllTimeouts();
-
     this._disconnectAllHandlers();
-
     this._stopAnimation();
-
     this._destroyUIAndManagers();
   }
 
   /**
-   * Create the Quick Settings indicator and connect its toggle handler
+   * Create the Quick Settings indicator and connect its toggle handler.
    */
   private _createIndicator() {
     if (this._indicator || !this._settings) return;
@@ -116,7 +125,7 @@ export class WeatherEffectController {
   }
 
   /**
-   * Destroy the Quick Settings indicator and disconnect its toggle handler
+   * Destroy the Quick Settings indicator and disconnect its toggle handler.
    */
   private _destroyIndicator() {
     this._disconnectToggleHandler();
@@ -128,49 +137,42 @@ export class WeatherEffectController {
   }
 
   /**
-   * Connect the toggle's notify::checked handler
+   * Connect the toggle's notify::checked handler using connectObject.
    */
   private _connectToggleHandler() {
-    if (this._toggleHandler || !this._indicator?.toggle) return;
+    if (!this._indicator?.toggle) return;
 
-    this._toggleHandler = this._indicator.toggle.connect(
+    this._indicator.toggle.connectObject(
       "notify::checked",
       () => {
         if (!this._isEnabled) return;
 
-        if (this._toggleTimeout) GLib.source_remove(this._toggleTimeout);
-
-        this._toggleTimeout = GLib.timeout_add(
-          GLib.PRIORITY_DEFAULT,
-          50,
-          () => {
-            if (!this._isEnabled) {
-              this._toggleTimeout = null;
-              return GLib.SOURCE_REMOVE;
-            }
-            this._syncToggleState();
+        this._toggleTimeout = this._removeTimeout(this._toggleTimeout);
+        this._toggleTimeout = this._addTimeout(GLib.PRIORITY_DEFAULT, 50, () => {
+          if (!this._isEnabled) {
             this._toggleTimeout = null;
             return GLib.SOURCE_REMOVE;
-          },
-        );
+          }
+          this._syncToggleState();
+          this._toggleTimeout = null;
+          return GLib.SOURCE_REMOVE;
+        });
       },
+      this, // Target object required for disconnectObject
     );
   }
 
   /**
-   * Disconnect the toggle's notify::checked handler
+   * Disconnect the toggle's handlers cleanly.
    */
   private _disconnectToggleHandler() {
-    if (this._toggleHandler && this._indicator?.toggle) {
-      try {
-        this._indicator.toggle.disconnect(this._toggleHandler);
-      } catch (_e) {}
-      this._toggleHandler = null;
+    if (this._indicator?.toggle) {
+      this._indicator.toggle.disconnectObject(this);
     }
   }
 
   /**
-   * Handle show-in-quick-settings setting change
+   * Handle show-in-quick-settings setting change.
    */
   private _onShowInQuickSettingsChanged() {
     if (!this._isEnabled || !this._settings) return;
@@ -179,8 +181,6 @@ export class WeatherEffectController {
 
     if (show && !this._indicator) {
       this._createIndicator();
-
-      // Sync the toggle state with current GSettings "active" value
       const toggle = this._getSafeToggle();
       if (toggle) {
         toggle.checked = this._settings.get_boolean("active");
@@ -193,39 +193,47 @@ export class WeatherEffectController {
   }
 
   /**
-   * Set up all event handlers
+   * Set up all event handlers using GNOME's connectObject pattern.
    */
   private _setupEventHandlers() {
-    // Overview
-    this._overviewHandler = Main.overview.connect("showing", () => {
-      if (!this._isEnabled) return;
-      const mode: DisplayMode = this._settings.get_string("display-mode");
-      if (mode === "wallpaper") this._stopAnimation();
-    });
+    // Overview events
+    Main.overview.connectObject(
+      "showing",
+      () => {
+        if (!this._isEnabled) return;
+        const mode: DisplayMode = this._settings.get_string("display-mode");
+        if (mode === "wallpaper") this._stopAnimation();
+      },
+      this,
+    );
 
-    this._overviewHideHandler = Main.overview.connect("hidden", () => {
-      if (!this._isEnabled) return;
-      this._recomputeObscuration();
-      this._syncToggleState();
-    });
+    Main.overview.connectObject(
+      "hidden",
+      () => {
+        if (!this._isEnabled) return;
+        this._recomputeObscuration();
+        this._syncToggleState();
+      },
+      this,
+    );
 
-    // Toggle (connect only if indicator exists)
+    // Toggle indicator events
     this._connectToggleHandler();
 
-    // Settings
+    // Settings events
     if (this._settings) {
-      // Show in Quick Settings
-      this._showInQsHandler = this._settings.connect(
+      this._settings.connectObject(
         "changed::show-in-quick-settings",
         () => {
           if (!this._isEnabled) return;
           this._onShowInQuickSettingsChanged();
         },
+        this,
       );
 
-      // Display mode
-      this._settingsHandlers.push(
-        this._settings.connect("changed::display-mode", () => {
+      this._settings.connectObject(
+        "changed::display-mode",
+        () => {
           if (!this._isEnabled || !this._monitorManager) return;
 
           const wasRunning = !!this.timeoutId;
@@ -233,10 +241,8 @@ export class WeatherEffectController {
           this._monitorManager?.attachMonitorActors();
 
           if (wasRunning) {
-            if (this._displayModeTimeout)
-              GLib.source_remove(this._displayModeTimeout);
-
-            this._displayModeTimeout = GLib.timeout_add(
+            this._displayModeTimeout = this._removeTimeout(this._displayModeTimeout);
+            this._displayModeTimeout = this._addTimeout(
               GLib.PRIORITY_DEFAULT,
               100,
               () => {
@@ -252,25 +258,23 @@ export class WeatherEffectController {
           } else {
             this._syncToggleState();
           }
-        }),
+        },
+        this,
+      );
 
-        // Pause on fullscreen
-        this._settings.connect("changed::pause-on-fullscreen", () => {
-          if (
-            !this._isEnabled ||
-            !this._monitorManager ||
-            !this._obscurationManager
-          )
-            return;
-
+      this._settings.connectObject(
+        "changed::pause-on-fullscreen",
+        () => {
+          if (!this._isEnabled || !this._monitorManager || !this._obscurationManager) return;
           this._recomputeObscuration();
           this._syncToggleState();
-        }),
+        },
+        this,
       );
     }
 
-    // Monitors
-    this._monitorsChangedHandler = Main.layoutManager.connect(
+    // Monitor and Layout events
+    Main.layoutManager.connectObject(
       "monitors-changed",
       () => {
         if (!this._isEnabled) return;
@@ -279,9 +283,10 @@ export class WeatherEffectController {
         this._recomputeObscuration();
         this._syncToggleState();
       },
+      this,
     );
 
-    this._workareasChangedHandler = global.display.connect(
+    global.display.connectObject(
       "workareas-changed",
       () => {
         if (!this._isEnabled) return;
@@ -289,122 +294,122 @@ export class WeatherEffectController {
         this._recomputeObscuration();
         this._syncToggleState();
       },
+      this,
     );
 
-    // Workspace
-    this._workspaceChangedHandler = global.workspace_manager.connect(
+    // Workspace events
+    global.workspace_manager.connectObject(
       "active-workspace-changed",
       () => {
         if (!this._isEnabled) return;
-
         const mode: DisplayMode = this._settings.get_string("display-mode");
         if (mode === "wallpaper") {
           this._monitorManager?.getMonitorActors().forEach((ma) => {
             this._monitorManager?.clearParticles(ma);
           });
         }
-
         this._debouncedRecompute();
       },
+      this,
     );
 
-    // Windows
-    this._windowCreatedHandler = global.display.connect(
+    // Window and Display events
+    global.display.connectObject(
       "window-created",
       () => {
         if (!this._isEnabled) return;
         this._debouncedRecompute();
       },
+      this,
     );
 
-    this._windowHandler = global.window_manager.connect("size-changed", () => {
-      if (!this._isEnabled) return;
-      this._debouncedRecompute();
-    });
+    global.window_manager.connectObject(
+      "size-changed",
+      () => {
+        if (!this._isEnabled) return;
+        this._debouncedRecompute();
+      },
+      this,
+    );
 
-    this._windowMinimizeHandler = global.window_manager.connect(
+    global.window_manager.connectObject(
       "minimize",
       () => {
         if (!this._isEnabled) return;
         this._debouncedRecompute();
       },
+      this,
     );
 
-    this._windowUnminimizeHandler = global.window_manager.connect(
+    global.window_manager.connectObject(
       "unminimize",
       () => {
         if (!this._isEnabled) return;
         this._debouncedRecompute();
       },
+      this,
     );
 
-    this._notifyFocusWindowHandler = global.display.connect(
+    global.display.connectObject(
       "notify::focus-window",
       () => {
         if (!this._isEnabled) return;
         this._debouncedRecompute();
       },
+      this,
     );
 
-    this._notifyFullscreenHandler = global.display.connect(
+    global.display.connectObject(
       "in-fullscreen-changed",
       () => {
         if (!this._isEnabled) return;
         this._debouncedRecompute();
       },
+      this,
     );
 
-    this._grabOpBeginHandler = global.display.connect("grab-op-begin", () => {
-      if (!this._isEnabled) return;
+    // Grab operation events (window dragging/resizing)
+    global.display.connectObject(
+      "grab-op-begin",
+      () => {
+        if (!this._isEnabled) return;
+        this._grabDragTimeout = this._removeTimeout(this._grabDragTimeout);
+        this._grabDragTimeout = this._addTimeout(
+          GLib.PRIORITY_DEFAULT,
+          200,
+          () => {
+            if (!this._isEnabled) {
+              this._grabDragTimeout = null;
+              return GLib.SOURCE_REMOVE;
+            }
+            this._recomputeObscuration();
+            this._syncToggleState();
+            return GLib.SOURCE_CONTINUE;
+          },
+        );
+      },
+      this,
+    );
 
-      if (this._grabDragTimeout) GLib.source_remove(this._grabDragTimeout);
-
-      this._grabDragTimeout = GLib.timeout_add(
-        GLib.PRIORITY_DEFAULT,
-        200,
-        () => {
-          if (!this._isEnabled) {
-            this._grabDragTimeout = null;
-            return GLib.SOURCE_REMOVE;
-          }
-          this._recomputeObscuration();
-          this._syncToggleState();
-          return GLib.SOURCE_CONTINUE;
-        },
-      );
-    });
-
-    this._grabOpEndHandler = global.display.connect("grab-op-end", () => {
-      if (!this._isEnabled) return;
-
-      if (this._grabDragTimeout) {
-        GLib.source_remove(this._grabDragTimeout);
-        this._grabDragTimeout = null;
-      }
-
-      this._debouncedRecompute();
-    });
+    global.display.connectObject(
+      "grab-op-end",
+      () => {
+        if (!this._isEnabled) return;
+        this._grabDragTimeout = this._removeTimeout(this._grabDragTimeout);
+        this._debouncedRecompute();
+      },
+      this,
+    );
   }
 
   /**
-   * Stop all timeouts
+   * Stop and clear all tracked timeouts.
    */
   private _stopAllTimeouts() {
-    const timeouts = [
-      this._bootTimeout,
-      this._toggleTimeout,
-      this._displayModeTimeout,
-      this._debounceTimeout,
-      this._grabDragTimeout,
-    ];
+    this._timeouts.forEach((id) => GLib.source_remove(id));
+    this._timeouts.clear();
 
-    timeouts.forEach((timeout) => {
-      if (timeout) {
-        GLib.source_remove(timeout);
-      }
-    });
-
-    this._bootTimeout = null;
+    this.timeoutId = null;
     this._toggleTimeout = null;
     this._displayModeTimeout = null;
     this._debounceTimeout = null;
@@ -412,69 +417,24 @@ export class WeatherEffectController {
   }
 
   /**
-   * Disconnect all handlers
+   * Disconnect all handlers automatically by target object.
    */
   private _disconnectAllHandlers() {
     this._disconnectToggleHandler();
 
-    // Show in Quick Settings handler
-    if (this._showInQsHandler && this._settings) {
-      try {
-        this._settings.disconnect(this._showInQsHandler);
-      } catch (_e) {}
-      this._showInQsHandler = null;
+    if (this._settings) {
+      this._settings.disconnectObject(this);
     }
 
-    const handlers = [
-      { handler: this._overviewHandler, obj: Main.overview },
-      { handler: this._overviewHideHandler, obj: Main.overview },
-      { handler: this._monitorsChangedHandler, obj: Main.layoutManager },
-      { handler: this._workareasChangedHandler, obj: global.display },
-      { handler: this._workspaceChangedHandler, obj: global.workspace_manager },
-      { handler: this._windowCreatedHandler, obj: global.display },
-      { handler: this._windowHandler, obj: global.window_manager },
-      { handler: this._windowMinimizeHandler, obj: global.window_manager },
-      { handler: this._windowUnminimizeHandler, obj: global.window_manager },
-      { handler: this._notifyFocusWindowHandler, obj: global.display },
-      { handler: this._notifyFullscreenHandler, obj: global.display },
-      { handler: this._grabOpBeginHandler, obj: global.display },
-      { handler: this._grabOpEndHandler, obj: global.display },
-    ];
-
-    handlers.forEach(({ handler, obj }) => {
-      if (handler && obj) {
-        try {
-          obj.disconnect(handler);
-        } catch (_e) {}
-      }
-    });
-
-    this._settingsHandlers.forEach((id) => {
-      if (this._settings && id) {
-        try {
-          this._settings.disconnect(id);
-        } catch (_e) {}
-      }
-    });
-    this._settingsHandlers = [];
-
-    this._overviewHandler = null;
-    this._overviewHideHandler = null;
-    this._monitorsChangedHandler = null;
-    this._workareasChangedHandler = null;
-    this._workspaceChangedHandler = null;
-    this._windowCreatedHandler = null;
-    this._windowHandler = null;
-    this._windowMinimizeHandler = null;
-    this._windowUnminimizeHandler = null;
-    this._notifyFocusWindowHandler = null;
-    this._notifyFullscreenHandler = null;
-    this._grabOpBeginHandler = null;
-    this._grabOpEndHandler = null;
+    Main.overview.disconnectObject(this);
+    Main.layoutManager.disconnectObject(this);
+    global.display.disconnectObject(this);
+    global.workspace_manager.disconnectObject(this);
+    global.window_manager.disconnectObject(this);
   }
 
   /**
-   * Destroy UI and managers
+   * Destroy UI components and managers.
    */
   private _destroyUIAndManagers() {
     this._destroyIndicator();
@@ -494,17 +454,15 @@ export class WeatherEffectController {
   }
 
   /**
-   * Debounced recompute of obscuration
+   * Debounced recompute of obscuration.
    */
   private _debouncedRecompute() {
-    if (this._debounceTimeout) GLib.source_remove(this._debounceTimeout);
-
-    this._debounceTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+    this._debounceTimeout = this._removeTimeout(this._debounceTimeout);
+    this._debounceTimeout = this._addTimeout(GLib.PRIORITY_DEFAULT, 100, () => {
       if (!this._isEnabled) {
         this._debounceTimeout = null;
         return GLib.SOURCE_REMOVE;
       }
-
       this._recomputeObscuration();
       this._syncToggleState();
       this._debounceTimeout = null;
@@ -513,22 +471,17 @@ export class WeatherEffectController {
   }
 
   /**
-   * Sync toggle state.
-   * When the indicator is hidden (show-in-quick-settings = false),
-   * falls back to the GSettings "active" value.
+   * Sync toggle state and determine if the animation should run.
    */
   private _syncToggleState() {
-    if (!this._isEnabled) return;
-    if (!this._monitorManager || !this._settings) return;
+    if (!this._isEnabled || !this._monitorManager || !this._settings) return;
 
-    // Determine checked state: from toggle if visible, from GSettings otherwise
     let toggleChecked: boolean;
-
     const toggle = this._getSafeToggle();
+
     if (toggle) {
       toggleChecked = !!toggle.checked;
     } else {
-      // No indicator — use persisted "active" setting
       toggleChecked = this._settings.get_boolean("active");
     }
 
@@ -556,16 +509,15 @@ export class WeatherEffectController {
   }
 
   /**
-   * Start animation
+   * Start particle animation loop.
    */
   private _startAnimation() {
-    if (this.timeoutId) return;
-    if (!this._isEnabled || !this._settings) return;
+    if (this.timeoutId || !this._isEnabled || !this._settings) return;
 
     const mode: DisplayMode = this._settings.get_string("display-mode");
     if (mode === "wallpaper" && Main.overview.visible) return;
 
-    this.timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+    this.timeoutId = this._addTimeout(GLib.PRIORITY_DEFAULT, 50, () => {
       if (!this._isEnabled) {
         this.timeoutId = null;
         return GLib.SOURCE_REMOVE;
@@ -576,59 +528,44 @@ export class WeatherEffectController {
   }
 
   /**
-   * Stop animation
+   * Stop animation and clean up particles cleanly without silent try-catch blocks.
    */
   private _stopAnimation() {
-    if (this.timeoutId) {
-      GLib.source_remove(this.timeoutId);
-      this.timeoutId = null;
-    }
+    this.timeoutId = this._removeTimeout(this.timeoutId);
 
-    if (this._monitorManager) {
-      const monitorActors = this._monitorManager.getMonitorActors();
+    if (!this._monitorManager) return;
+    const monitorActors = this._monitorManager.getMonitorActors();
 
-      for (const ma of monitorActors) {
-        if (!ma?.actor || (ma.actor as any)._isDestroyedByGnome) continue;
+    for (const ma of monitorActors) {
+      if (!ma?.actor || (ma.actor as any)._isDestroyedByGnome) continue;
 
-        for (const particle of ma.particles) {
-          if (particle && !(particle as any)._isDestroyedByGnome) {
-            try {
-              (particle as any)._weatherDisposed = true;
-              particle.remove_all_transitions();
-            } catch (e) {
-              logError(`remove_all_transitions failed: ${e}`);
-            }
-          }
+      for (const particle of ma.particles) {
+        if (particle && !(particle as any)._isDestroyedByGnome) {
+          (particle as any)._weatherDisposed = true;
+          particle.remove_all_transitions();
         }
-
-        this._monitorManager.clearParticles(ma);
       }
+      this._monitorManager.clearParticles(ma);
     }
   }
 
   /**
-   * Recompute obscuration for monitors
+   * Recompute obscuration for all active monitors.
    */
   private _recomputeObscuration() {
-    if (!this._isEnabled || !this._obscurationManager || !this._monitorManager)
-      return;
-
+    if (!this._isEnabled || !this._obscurationManager || !this._monitorManager) return;
     this._obscurationManager.recomputeObscuration(
       this._monitorManager.getMonitorActors(),
     );
   }
 
   /**
-   * Can run on monitor.
-   * When the indicator is hidden, uses GSettings "active" instead of toggle.checked.
+   * Check if animation can run on a specific monitor.
    */
   private _canRunOnMonitor(monitorActor: MonitorActor): boolean {
     if (!this._isEnabled || !this._obscurationManager) return false;
 
     const toggle = this._getSafeToggle();
-
-    // If no toggle (indicator hidden), create a virtual toggle-like object
-    // so ObscurationManager can evaluate properly
     const toggleProxy = toggle ?? {
       checked: this._settings?.get_boolean("active") ?? false,
       _isDestroyedByGnome: false,
@@ -642,12 +579,12 @@ export class WeatherEffectController {
   }
 
   /**
-   * Animate all particles
+   * Animate and manage particle counts across monitors.
    */
   private _animateParticles() {
-    if (!this._isEnabled) return;
-    if (!this._monitorManager || !this._particleManager || !this._settings)
+    if (!this._isEnabled || !this._monitorManager || !this._particleManager || !this._settings) {
       return;
+    }
 
     const type: EffectType = this._settings.get_string("effect-type");
     const totalParticleCount = this._settings.get_int("particle-count");
@@ -661,10 +598,7 @@ export class WeatherEffectController {
     );
 
     for (const monitorActor of monitorActors) {
-      if (
-        !monitorActor?.actor ||
-        (monitorActor.actor as any)._isDestroyedByGnome
-      ) {
+      if (!monitorActor?.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
         continue;
       }
 
@@ -711,39 +645,27 @@ export class WeatherEffectController {
         }
       }
 
-      // Clean up disposed / wrong-type particles
+      // Clean up disposed or mismatched particles without silent try-catch blocks
       for (let i = monitorActor.particles.length - 1; i >= 0; i--) {
         const particle = monitorActor.particles[i];
 
         if (
           !particle ||
           (particle as any)._isDestroyedByGnome ||
-          (particle as any)._weatherDisposed
+          (particle as any)._weatherDisposed ||
+          !particle.get_parent()
         ) {
           monitorActor.particles.splice(i, 1);
           continue;
         }
 
-        if (!particle.get_parent()) {
-          monitorActor.particles.splice(i, 1);
-          continue;
-        }
-
         if (!this._particleManager.isCorrectType(particle, type)) {
-          let currentX = 0;
-          let currentY = -20;
+          const currentX = particle.x;
+          const currentY = particle.y;
 
-          try {
-            currentX = particle.x;
-            currentY = particle.y;
-          } catch (_e) {}
-
-          try {
-            (particle as any)._weatherDisposed = true;
-            particle.remove_all_transitions();
-            particle.destroy();
-          } catch (_e) {}
-
+          (particle as any)._weatherDisposed = true;
+          particle.remove_all_transitions();
+          particle.destroy();
           monitorActor.particles.splice(i, 1);
 
           if (!this._isEnabled) continue;
@@ -757,7 +679,6 @@ export class WeatherEffectController {
           if (newParticle) {
             newParticle.x = currentX;
             newParticle.y = currentY;
-
             monitorActor.particles.push(newParticle);
             this._particleManager.animateSingleParticle(
               newParticle,
@@ -772,7 +693,7 @@ export class WeatherEffectController {
   }
 
   /**
-   * Handler invoked when a particle animation completes
+   * Handler invoked when a particle animation completes.
    */
   private _onParticleAnimationComplete(
     particle: any,
@@ -785,104 +706,79 @@ export class WeatherEffectController {
     if (
       !particle ||
       (particle as any)._isDestroyedByGnome ||
-      (particle as any)._weatherDisposed
-    )
+      (particle as any)._weatherDisposed ||
+      !monitorActor?.actor ||
+      (monitorActor.actor as any)._isDestroyedByGnome ||
+      typeof (particle as any).get_parent !== "function"
+    ) {
       return;
-
-    if (!monitorActor?.actor || (monitorActor.actor as any)._isDestroyedByGnome)
-      return;
-
-    if (typeof (particle as any).get_parent !== "function") return;
+    }
 
     const monitorActors = this._monitorManager!.getMonitorActors();
     if (!monitorActors.includes(monitorActor)) return;
 
-    try {
-      particle.y = -20;
-      particle.x = Math.random() * Math.max(1, monitorActor.monitor.width);
+    particle.y = -20;
+    particle.x = Math.random() * Math.max(1, monitorActor.monitor.width);
 
-      const updatedType: EffectType = this._settings.get_string("effect-type");
-      const updatedSpeed = this._settings.get_int("speed");
-      const updatedBaseDuration =
-        this._particleManager!.getBaseDuration(updatedSpeed);
-      const mode: DisplayMode = this._settings.get_string("display-mode");
+    const updatedType: EffectType = this._settings.get_string("effect-type");
+    const updatedSpeed = this._settings.get_int("speed");
+    const updatedBaseDuration = this._particleManager!.getBaseDuration(updatedSpeed);
+    const mode: DisplayMode = this._settings.get_string("display-mode");
 
-      this._particleManager!.updateParticleStyle(particle, updatedType);
+    this._particleManager!.updateParticleStyle(particle, updatedType);
 
-      // Check if animation should continue
-      const canRun =
-        this._isToggleActive() &&
-        (mode === "screen" || this._canRunOnMonitor(monitorActor));
+    const canRun =
+      this._isToggleActive() &&
+      (mode === "screen" || this._canRunOnMonitor(monitorActor));
 
-      if (canRun) {
-        this._particleManager!.animateSingleParticle(
-          particle,
-          monitorActor,
-          screenHeight,
-          updatedBaseDuration,
-        );
-      } else {
-        this._safeDestroyParticle(particle, monitorActor);
-      }
-    } catch (e) {
-      logError(`onParticleAnimationComplete failed: ${e}`);
-      this._safeDestroyParticle(particle, monitorActor, true);
+    if (canRun) {
+      this._particleManager!.animateSingleParticle(
+        particle,
+        monitorActor,
+        screenHeight,
+        updatedBaseDuration,
+      );
+    } else {
+      this._safeDestroyParticle(particle, monitorActor);
     }
   }
 
   /**
-   * Check if the toggle is active.
-   * Uses the toggle if indicator is visible, GSettings "active" otherwise.
+   * Check if the toggle is currently active.
    */
   private _isToggleActive(): boolean {
     const toggle = this._getSafeToggle();
-
-    if (toggle) {
-      return !!toggle.checked;
-    }
-
-    // No indicator — fallback to persisted setting
+    if (toggle) return !!toggle.checked;
     return this._settings?.get_boolean("active") ?? false;
   }
 
   /**
-   * Safely destroy a particle and remove from monitor
+   * Safely destroy a particle and remove it from monitor tracking.
    */
-  private _safeDestroyParticle(
-    particle: any,
-    monitorActor: MonitorActor,
-    logErrors: boolean = false,
-  ) {
-    try {
-      if (particle && !(particle as any)._isDestroyedByGnome) {
-        (particle as any)._weatherDisposed = true;
-        particle.remove_all_transitions();
-        particle.destroy();
-      }
-    } catch (e) {
-      if (logErrors) {
-        logError(`cleanup after failure failed: ${e}`);
-      }
+  private _safeDestroyParticle(particle: any, monitorActor: MonitorActor) {
+    if (particle && !(particle as any)._isDestroyedByGnome) {
+      (particle as any)._weatherDisposed = true;
+      particle.remove_all_transitions();
+      particle.destroy();
     }
 
     const index = monitorActor.particles.indexOf(particle);
-    if (index !== -1) monitorActor.particles.splice(index, 1);
+    if (index !== -1) {
+      monitorActor.particles.splice(index, 1);
+    }
   }
 
   /**
-   * Safely get the toggle, guarding against disposed actors
+   * Safely get the toggle actor without relying on try-catch blocks.
    */
   private _getSafeToggle(): any | null {
-    try {
-      if (!this._indicator || (this._indicator as any)._isDestroyedByGnome)
-        return null;
-
-      const toggle = this._indicator.toggle;
-      if (!toggle || (toggle as any)._isDestroyedByGnome) return null;
-
-      return toggle;
-    } catch (_e) {
+    if (!this._indicator || (this._indicator as any)._isDestroyedByGnome) {
       return null;
     }
+    const toggle = this._indicator.toggle;
+    if (!toggle || (toggle as any)._isDestroyedByGnome) {
+      return null;
+    }
+    return toggle;
   }
 }

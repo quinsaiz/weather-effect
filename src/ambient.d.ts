@@ -40,6 +40,8 @@ declare module "resource:///org/gnome/shell/ui/quickSettings.js" {
         iconName: string;
         connect(signal: string, callback: Function): number;
         disconnect(id: number): void;
+        connectObject(signal: string, callback: Function, token: any): void;
+        disconnectObject(token: any): void;
         destroy(): void;
     }
     export class SystemIndicator {
@@ -48,6 +50,8 @@ declare module "resource:///org/gnome/shell/ui/quickSettings.js" {
         quickSettingsItems: any[];
         connect(signal: string, callback: Function): number;
         disconnect(id: number): void;
+        connectObject(signal: string, callback: Function, token: any): void;
+        disconnectObject(token: any): void;
         destroy(): void;
     }
 }

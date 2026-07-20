@@ -2,7 +2,6 @@ import Clutter from "gi://Clutter";
 import St from "gi://St";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
-import { logError } from "./Debug.js";
 
 export interface MonitorActor {
   actor: Clutter.Actor | null;
@@ -60,6 +59,9 @@ export class MonitorManager {
   attachMonitorActors() {
     if (!this.settings) return;
 
+    const uiGroup = Main.layoutManager.uiGroup;
+    if (!uiGroup || (uiGroup as any)._isDestroyedByGnome) return;
+
     const mode = this.settings.get_string("display-mode") as
       | "screen"
       | "wallpaper";
@@ -78,7 +80,7 @@ export class MonitorManager {
       if (parent) parent.remove_child(monitorActor.actor);
 
       if (mode === "screen" || !backgroundGroup) {
-        Main.layoutManager.uiGroup.add_child(monitorActor.actor);
+        uiGroup.add_child(monitorActor.actor);
       } else {
         backgroundGroup.add_child(monitorActor.actor);
       }
@@ -113,11 +115,7 @@ export class MonitorManager {
 
       if (!exists) {
         monitorActor.particles = [];
-        try {
-          monitorActor.actor.destroy();
-        } catch (e) {
-          logError(`destroy monitor actor failed: ${e}`);
-        }
+        monitorActor.actor.destroy();
         this.monitorActors.splice(i, 1);
       }
     }
@@ -157,13 +155,9 @@ export class MonitorManager {
       if (monitorActor) {
         monitorActor.particles.forEach((p) => {
           if (p && !(p as any)._isDestroyedByGnome) {
-            try {
-              (p as any)._weatherDisposed = true;
-              p.remove_all_transitions();
-              p.destroy();
-            } catch (e) {
-              logError(`destroy particle on monitor destroy failed: ${e}`);
-            }
+            (p as any)._weatherDisposed = true;
+            p.remove_all_transitions();
+            p.destroy();
           }
         });
         monitorActor.particles = [];
@@ -171,12 +165,8 @@ export class MonitorManager {
           monitorActor.actor &&
           !(monitorActor.actor as any)._isDestroyedByGnome
         ) {
-          try {
-            monitorActor.actor.destroy();
-            monitorActor.actor = null;
-          } catch (e) {
-            logError(`destroy monitor actor failed: ${e}`);
-          }
+          monitorActor.actor.destroy();
+          monitorActor.actor = null;
         }
       }
     }
@@ -208,13 +198,9 @@ export class MonitorManager {
 
     monitorActor.particles.forEach((p) => {
       if (p && !(p as any)._isDestroyedByGnome) {
-        try {
-          (p as any)._weatherDisposed = true;
-          p.remove_all_transitions();
-          p.destroy();
-        } catch (e) {
-          logError(`destroy particle on monitor clear particles failed: ${e}`);
-        }
+        (p as any)._weatherDisposed = true;
+        p.remove_all_transitions();
+        p.destroy();
       }
     });
     monitorActor.particles = [];

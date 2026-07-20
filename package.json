@@ -5,7 +5,8 @@
   "description": "Adds a weather effect (snow or rain) to your GNOME wallpaper.",
   "scripts": {
     "install": "tsc -p tsconfig.json && scripts/build.sh -i",
-    "build": "scripts/build.sh",
+    "build": "tsc -p tsconfig.json && scripts/build.sh",
+    "uninstall": "scripts/build.sh -u",
     "delete": "scripts/build.sh -u",
     "watch": "tsc -p tsconfig.json -w"
   },

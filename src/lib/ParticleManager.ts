@@ -1,7 +1,6 @@
 import Clutter from "gi://Clutter";
 import St from "gi://St";
 import { MonitorActor } from "./MonitorManager.js";
-import { logError } from "./Debug.js";
 
 type EffectType = "snow" | "rain";
 
@@ -49,8 +48,7 @@ export class ParticleManager {
     const safeX = Math.random() * safeScreenWidth;
 
     let particle: St.Widget;
-    try {
-      if (type === "snow") {
+    if (type === "snow") {
         if (snowEmoji && snowEmoji !== "") {
           particle = new St.Label({
             text: snowEmoji,
@@ -89,19 +87,6 @@ export class ParticleManager {
           });
         }
       }
-    } catch (e) {
-      logError(`createParticle fallback: ${e}`);
-      
-      particle = new St.Widget({
-        style: `background-color: ${
-          type === "snow"
-            ? this.settings.get_string("snow-color")
-            : this.settings.get_string("rain-color")
-        }; width: ${size}px; height: ${size}px; border-radius: ${size}px;`,
-        x: safeX,
-        y: -20,
-      });
-    }
 
     if (
       monitorActor.actor &&
@@ -129,7 +114,6 @@ export class ParticleManager {
     const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
     const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();
 
-    try {
       if (type === "snow") {
         if (snowEmoji && snowEmoji !== "" && particle instanceof St.Label) {
           particle.text = snowEmoji;
@@ -153,9 +137,6 @@ export class ParticleManager {
           )}; width: ${size / 2}px; height: ${size * 2}px;`;
         }
       }
-    } catch (e) {
-      logError(`updateParticleStyle failed: ${e}`);
-    }
   }
 
   /**
@@ -205,7 +186,6 @@ export class ParticleManager {
     const distanceToTravel = Math.max(1, targetY - startY);
     const actualDuration = (distanceToTravel / totalDistance) * totalDuration;
 
-    try {
       particle.show();
       particle.ease({
         y: targetY,
@@ -221,12 +201,7 @@ export class ParticleManager {
           ) {
             return;
           }
-          try {
-            if (!particleRef.get_parent()) {
-              return;
-            }
-          } catch (e) {
-            logError(`animateSingleParticle parent check failed: ${e}`);
+          if (!particleRef.get_parent()) {
             return;
           }
           this.onAnimationFrame(
@@ -237,9 +212,6 @@ export class ParticleManager {
           );
         },
       });
-    } catch (e) {
-      logError(`animateSingleParticle failed: ${e}`);
-    }
   }
 
   /**
@@ -253,7 +225,6 @@ export class ParticleManager {
     const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
     const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();
 
-    try {
       if (type === "snow") {
         if (
           snowEmoji &&
@@ -283,10 +254,6 @@ export class ParticleManager {
           return true;
         }
       }
-    } catch (e) {
-      logError(`isCorrectType check failed: ${e}`);
-      return false;
-    }
     return false;
   }
 }

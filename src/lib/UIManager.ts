@@ -5,7 +5,6 @@ import {
   QuickMenuToggle,
   SystemIndicator,
 } from "resource:///org/gnome/shell/ui/quickSettings.js";
-import { logError } from "./Debug.js";
 
 type EffectType = "snow" | "rain";
 
@@ -18,9 +17,6 @@ export const WeatherToggle = GObject.registerClass(
     private _snowButton: St.Button | null = null;
     private _rainButton: St.Button | null = null;
     private _buttonBox: St.BoxLayout | null = null;
-    private _settingsHandler: number | null = null;
-    private _snowButtonHandler: number | null = null;
-    private _rainButtonHandler: number | null = null;
 
     constructor(settings: any) {
       super({
@@ -75,12 +71,12 @@ export const WeatherToggle = GObject.registerClass(
       snowBox.add_child(snowLabel);
       this._buttonBox.add_child(snowBox);
 
-      this._snowButtonHandler = this._snowButton.connect("clicked", () => {
+      this._snowButton.connectObject("clicked", () => {
         this._settings.set_string("effect-type", "snow");
         this.checked = true;
         this._updateButtons();
         this.iconName = "weather-snow-symbolic";
-      });
+      }, this);
 
       const rainBox = new St.BoxLayout({
         style_class: "keyboard-brightness-level",
@@ -103,16 +99,16 @@ export const WeatherToggle = GObject.registerClass(
       rainBox.add_child(rainLabel);
       this._buttonBox.add_child(rainBox);
 
-      this._rainButtonHandler = this._rainButton.connect("clicked", () => {
+      this._rainButton.connectObject("clicked", () => {
         this._settings.set_string("effect-type", "rain");
         this.checked = true;
         this._updateButtons();
         this.iconName = "weather-showers-symbolic";
-      });
+      }, this);
 
       this.menu.box.add_child(this._buttonBox);
 
-      this._settingsHandler = this._settings.connect(
+      this._settings.connectObject(
         "changed::effect-type",
         () => {
           this._updateButtons();
@@ -123,6 +119,7 @@ export const WeatherToggle = GObject.registerClass(
               ? "weather-snow-symbolic"
               : "weather-showers-symbolic";
         },
+        this
       );
 
       this._updateButtons();
@@ -146,18 +143,9 @@ export const WeatherToggle = GObject.registerClass(
     }
 
     destroy() {
-      if (this._settingsHandler && this._settings) {
-        this._settings.disconnect(this._settingsHandler);
-        this._settingsHandler = null;
-      }
-      if (this._snowButtonHandler && this._snowButton) {
-        this._snowButton.disconnect(this._snowButtonHandler);
-        this._snowButtonHandler = null;
-      }
-      if (this._rainButtonHandler && this._rainButton) {
-        this._rainButton.disconnect(this._rainButtonHandler);
-        this._rainButtonHandler = null;
-      }
+      this._settings?.disconnectObject(this);
+      this._snowButton?.disconnectObject(this);
+      this._rainButton?.disconnectObject(this);
 
       this._settings = null;
       this._snowButton = null;
@@ -177,8 +165,6 @@ export const WeatherIndicator = GObject.registerClass(
     public toggle: InstanceType<typeof WeatherToggle>;
     private _indicator: any;
     private _settings: any;
-    private _settingsHandler: number | null = null;
-    private _toggleHandler: number | null = null;
 
     constructor(settings: any) {
       super();
@@ -196,50 +182,40 @@ export const WeatherIndicator = GObject.registerClass(
       this.quickSettingsItems.push(this.toggle);
 
       this._updateIndicatorIcon();
-      this._settingsHandler = this._settings.connect(
+      this._settings.connectObject(
         "changed::effect-type",
         () => this._updateIndicatorIcon(),
+        this
       );
-      this._toggleHandler = this.toggle.connect("notify::checked", () =>
+      this.toggle.connectObject("notify::checked", () =>
         this._updateIndicatorIcon(),
+        this
       );
     }
 
     _updateIndicatorIcon() {
-      try {
-        if (
-          !this._settings ||
-          !this.toggle ||
-          !this._indicator ||
-          (this.toggle as any)._isDestroyedByGnome
-        )
-          return;
-        const effectType: EffectType = this._settings.get_string("effect-type");
-        let checked = false;
-        try {
-          checked = this.toggle.checked;
-        } catch (_e) {
-          return;
-        }
-        this._indicator.icon_name = checked
-          ? effectType === "snow"
-            ? "weather-snow-symbolic"
-            : "weather-showers-symbolic"
-          : "weather-clear-symbolic";
-      } catch (e) {
-        logError(`Failed to update indicator icon: ${e}`);
+      if (
+        !this._settings ||
+        !this.toggle ||
+        !this._indicator ||
+        (this.toggle as any)._isDestroyedByGnome
+      )
+        return;
+      const effectType: EffectType = this._settings.get_string("effect-type");
+      let checked = false;
+      if (this.toggle.checked !== undefined) {
+        checked = this.toggle.checked;
       }
+      this._indicator.icon_name = checked
+        ? effectType === "snow"
+          ? "weather-snow-symbolic"
+          : "weather-showers-symbolic"
+        : "weather-clear-symbolic";
     }
 
     destroy() {
-      if (this._settingsHandler && this._settings) {
-        this._settings.disconnect(this._settingsHandler);
-        this._settingsHandler = null;
-      }
-      if (this._toggleHandler && this.toggle) {
-        this.toggle.disconnect(this._toggleHandler);
-        this._toggleHandler = null;
-      }
+      this._settings?.disconnectObject(this);
+      this.toggle?.disconnectObject(this);
 
       if (this.toggle) {
         this.toggle.destroy();

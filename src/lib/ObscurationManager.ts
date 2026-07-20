@@ -1,7 +1,6 @@
 import Meta from "gi://Meta";
 
 import { MonitorActor } from "./MonitorManager.js";
-import { logError } from "./Debug.js";
 
 type DisplayMode = "wallpaper" | "screen";
 
@@ -43,32 +42,20 @@ export class ObscurationManager {
 
     const windows = windowActors
       .map((actor: any) => {
-        try {
-          return actor?.meta_window as Meta.Window;
-        } catch (_e) {
-          return null;
-        }
+        return actor?.meta_window as Meta.Window | null;
       })
       .filter((w): w is Meta.Window => {
         if (!w) return false;
-        try {
-          return (
-            !w.minimized &&
-            w.get_workspace() === activeWs &&
-            w.get_monitor() === monitor.index &&
-            w.get_window_type() === Meta.WindowType.NORMAL
-          );
-        } catch (_e) {
-          return false;
-        }
+        return (
+          !w.minimized &&
+          w.get_workspace() === activeWs &&
+          w.get_monitor() === monitor.index &&
+          w.get_window_type() === Meta.WindowType.NORMAL
+        );
       });
 
     const hasFullscreen = windows.some((w) => {
-      try {
         return w.is_fullscreen();
-      } catch (_e) {
-        return false;
-      }
     });
 
     if (hasFullscreen) {
@@ -129,16 +116,12 @@ export class ObscurationManager {
         .map((actor: any) => actor?.meta_window as Meta.Window)
         .filter((w): w is Meta.Window => {
           if (!w) return false;
-          try {
             return (
               !w.minimized &&
               w.get_workspace() === activeWs &&
               w.get_monitor() === monitorActor.monitor.index &&
               w.get_window_type() === Meta.WindowType.NORMAL
             );
-          } catch (_e) {
-            return false;
-          }
         });
 
       const pauseOnFullscreen = this.settings.get_boolean(
@@ -147,11 +130,7 @@ export class ObscurationManager {
 
       if (pauseOnFullscreen) {
         const hasFullscreen = windows.some((w) => {
-          try {
             return w.is_fullscreen();
-          } catch (_e) {
-            return false;
-          }
         });
         if (hasFullscreen) return false;
       }
