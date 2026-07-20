@@ -1,7 +1,7 @@
 {
   "name": "weather-effect-gnome",
   "private": true,
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Adds a weather effect (snow or rain) to your GNOME wallpaper.",
   "scripts": {
     "install": "tsc -p tsconfig.json && scripts/build.sh -i",
