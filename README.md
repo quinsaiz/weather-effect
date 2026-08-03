@@ -1,14 +1,22 @@
+<div align="center">
+
 # Weather Effect GNOME Extension
 
-![GNOME Shell](https://img.shields.io/badge/GNOME-Shell-blue?style=for-the-badge&logo=gnome)
+![GNOME Extension](https://img.shields.io/badge/GNOME-Extension-blue?style=for-the-badge&logo=gnome)
 ![License](https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-2.3-orange?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.4.0-orange?style=for-the-badge)
+
+</div>
 
 ## Description
 
-Weather Effect is a GNOME Shell extension that adds beautiful animated weather effects (snow or rain) to your desktop wallpaper or as a full-screen overlay. Enjoy the magic of falling snowflakes or raindrops on your GNOME desktop!
+Weather Effect is a GNOME Shell extension that adds beautiful animated weather effects (snow or rain) to your desktop wallpaper or as a full-screen overlay.
+
+Enjoy the magic of falling snowflakes or raindrops on your GNOME desktop!
 
 ## Preview
+
+<div align="center">
 
 ### Snow Effect
 
@@ -18,6 +26,10 @@ Weather Effect is a GNOME Shell extension that adds beautiful animated weather e
 
 ![Rain Effect Demo](demo/rain.gif)
 
+</div>
+
+---
+
 ### Key Features
 
 - ❄️ **Snow Effect**: Beautiful animated snowflakes falling on your desktop
@@ -26,11 +38,11 @@ Weather Effect is a GNOME Shell extension that adds beautiful animated weather e
   - **Wallpaper Mode**: Effects only on desktop wallpaper background
   - **Screen Mode**: Full-screen overlay that works even in overview
 - **Customizable Settings**:
-  - Particle count (5-50)
-  - Particle size (4-32 pixels)
+  - Particle count (5–50)
+  - Particle size (4–32 pixels)
   - Speed control (Slow, Medium, Fast)
   - Color customization for snow and rain
-  - Custom emoji support (❄, ❅, ❆, 💧)
+  - Preinstalled emojis support
 - **Multi-Monitor Support**: Automatically works across all connected monitors
 - **Smart Behavior**: Pauses when desktop is obscured by fullscreen windows
 - **Quick Settings Integration**: Easy access through GNOME Quick Settings menu
@@ -41,17 +53,23 @@ Weather Effect is a GNOME Shell extension that adds beautiful animated weather e
 
 - GNOME Shell 45+
 
-### Quick Installation
+### From GNOME Extensions
 
-1. **Download last [weather-effect@quinsaiz.github.shell-extension.zip](https://github.com/quinsaiz/weather-effect/releases)**
+Install directly from [extensions.gnome.org](https://extensions.gnome.org/extension/8848/weather-effect/).
 
-2. **Install:**
+### From Releases
+
+1. **Download the latest release archive:**
+
+   Download `weather-effect@quinsaiz.github.shell-extension.zip` from [Releases](https://github.com/quinsaiz/weather-effect/releases).
+
+2. **Install via CLI:**
 
    ```bash
    gnome-extensions install weather-effect@quinsaiz.github.shell-extension.zip
    ```
 
-3. **Log out and log back in**
+3. **Log out and log back in to apply changes.**
 
 ## Building from Source
 
@@ -59,27 +77,9 @@ If you want to build the extension from source code, follow these steps:
 
 ### Prerequisites for Building
 
-- **[Node.js](https://nodejs.org/)** (v16 or higher)
+- **Node.js** (v16 or higher)
 - **npm** (comes with Node.js)
-- **glib-compile-schemas** (usually comes with GNOME development packages)
-
-#### Ubuntu/Debian
-
-```bash
-sudo apt install nodejs npm gir1.2-glib-2.0
-```
-
-#### Fedora
-
-```bash
-sudo dnf install nodejs npm glib2-devel
-```
-
-#### Arch
-
-```bash
-sudo pacman -S nodejs npm glib2
-```
+- **glib-compile-schemas** (usually provided by the `glib2` package)
 
 ### Build Steps
 
@@ -99,19 +99,6 @@ sudo pacman -S nodejs npm glib2
 3. **Build the extension:**
 
    ```bash
-   npm run build
-   ```
-
-   This will:
-
-   - Compile TypeScript files to JavaScript
-   - Create the extension archive `.zip`
-
-   ---
-
-   **To compile and install the extension directly, run:**
-
-   ```bash
    npm run install
    ```
 
@@ -119,23 +106,28 @@ sudo pacman -S nodejs npm glib2
 
    - Compile TypeScript files to JavaScript
    - Create the extension archive `.zip`
-   - Install it into your local extensions directory
+   - Deploy it directly to your local extensions directory `~/.local/share/gnome-shell/extensions/`
 
 ## Usage
 
-1. **Open Quick Settings** by clicking the system menu in the top-right corner
-2. **Click the Weather Effect toggle** (weather icon)
+1. **Open Quick Settings** by clicking the system menu in the top-right corner.
+2. **Click the Weather Effect toggle**.
 3. **Select effect type**:
-   - Choose between **Snow** ❄️ or **Rain** 🌧️ using the horizontal selector buttons
+   - Choose between **Snow** or **Rain** using the horizontal selector buttons.
 4. **Configure settings** (optional):
-   - Open GNOME Extensions app
+   - Open GNOME Extensions app.
    - Find **Weather Effect** and click the settings icon.
-   - Adjust particle count, size, speed, colors, and display mode
+   - Adjust particle count, size, speed, colors, and display mode.
 
 ## Project Structure
 
-```text
+```plaintext
 weather-effect/
+├── demo/                           # Visual previews and media assets
+│   ├── rain.gif
+│   ├── rain.mp4
+│   ├── snow.gif
+│   └── snow.mp4
 ├── LICENSE
 ├── package.json
 ├── package-lock.json
@@ -143,20 +135,19 @@ weather-effect/
 ├── scripts/
 │   └── build.sh                    # Build and installation script
 ├── src/
-│   ├── ambient.d.ts                # Ambient type definitions for GJS
-│   ├── extension.ts                # Main extension entry point
-│   ├── metadata.json               # Extension manifest
-│   ├── prefs.ts                    # Preferences window
+│   ├── ambient.d.ts                # Ambient type definitions for GJS and GNOME Shell
+│   ├── extension.ts                # Main extension entry point (lifecycle hooks)
+│   ├── metadata.json               # Extension manifest for GNOME Shell
+│   ├── prefs.ts                    # Extension settings window entry point
 │   ├── lib/
-│   │   ├── Debug.ts                # Centralized logging
-│   │   ├── MonitorManager.ts       # Monitor actor management
-│   │   ├── ObscurationManager.ts   # Window obscuration detection
-│   │   ├── ParticleManager.ts      # Particle creation & animation
-│   │   ├── UIManager.ts            # Quick Settings UI components
-│   │   └── WeatherEffectController.ts # Main orchestrator
+│   │   ├── MonitorManager.ts       # Monitor detection and overlay actor placement
+│   │   ├── ObscurationManager.ts   # Active window occlusion and visibility tracking
+│   │   ├── ParticleManager.ts      # Particle lifecycle, physics, and canvas rendering
+│   │   ├── UIManager.ts            # Quick Settings panel Integration and UI components
+│   │   └── WeatherEffectController.ts # Core orchestrator binding components and weather events
 │   └── schemas/
-│       └── org.gnome.shell.extensions.weather-effect.gschema.xml # GSettings schema
-└── tsconfig.json                   # TypeScript compiler options
+│       └── org.gnome.shell.extensions.weather-effect.gschema.xml # GSettings schema definition
+└── tsconfig.json                   # TypeScript compiler configuration
 ```
 
 ## Configuration
@@ -171,12 +162,6 @@ The extension can be configured through the GNOME Extensions app settings:
 - **Snow Color**: White, Light Blue, or Silver
 - **Rain Color**: Gray or Dark Blue
 - **Custom Emojis**: Choose emoji or use default shapes
-
-## Author
-
-### quinsaiz
-
-GitHub: <https://github.com/quinsaiz>
 
 ## License
 
