@@ -80,6 +80,8 @@ If you want to build the extension from source code, follow these steps:
 - **Node.js** (v16 or higher)
 - **npm** (comes with Node.js)
 - **glib-compile-schemas** (usually provided by the `glib2` package)
+- **gnome-extensions** command-line tool
+- **unzip**
 
 ### Build Steps
 
@@ -93,20 +95,32 @@ If you want to build the extension from source code, follow these steps:
 2. **Install dependencies:**
 
    ```bash
-   npm i
+   npm ci
    ```
 
-3. **Build the extension:**
+   This only installs the locked development dependencies. It does not build or
+   install the GNOME Shell extension.
+
+3. **Validate and build the extension archive:**
 
    ```bash
-   npm run install
+   npm run build
    ```
 
    This will:
 
+   - Validate metadata, the settings schema, shell scripts, and TypeScript
    - Compile TypeScript files to JavaScript
-   - Create the extension archive `.zip`
-   - Deploy it directly to your local extensions directory `~/.local/share/gnome-shell/extensions/`
+   - Create and validate `build/weather-effect@quinsaiz.github.shell-extension.zip`
+
+4. **Build and install the extension locally (optional):**
+
+   ```bash
+   npm run install:extension
+   ```
+
+   This performs a fresh validated build, then installs only the archive created
+   by that build into your local GNOME Shell extensions directory.
 
 ## Usage
 
@@ -133,7 +147,9 @@ weather-effect/
 ├── package-lock.json
 ├── README.md
 ├── scripts/
-│   └── build.sh                    # Build and installation script
+│   ├── build.sh                    # Build and installation script
+│   ├── validate-package.sh         # Extension archive validation
+│   └── validate.sh                 # Static source validation
 ├── src/
 │   ├── ambient.d.ts                # Ambient type definitions for GJS and GNOME Shell
 │   ├── extension.ts                # Main extension entry point (lifecycle hooks)

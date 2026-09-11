@@ -4,8 +4,12 @@
   "version": "2.4.0",
   "description": "Adds a weather effect (snow or rain) to your GNOME wallpaper.",
   "scripts": {
-    "install": "tsc -p tsconfig.json && scripts/build.sh -i",
-    "build": "tsc -p tsconfig.json && scripts/build.sh",
+    "validate:static": "bash scripts/validate.sh",
+    "typecheck": "test -x ./node_modules/.bin/tsc || { echo 'TypeScript is not installed; run npm ci first.' >&2; exit 1; }; ./node_modules/.bin/tsc -p tsconfig.json --noEmit",
+    "validate": "npm run validate:static && npm run typecheck",
+    "build": "npm run validate && scripts/build.sh --clean && ./node_modules/.bin/tsc -p tsconfig.json && scripts/build.sh --pack",
+    "validate:package": "scripts/build.sh --validate-package",
+    "install:extension": "npm run build && scripts/build.sh --install",
     "uninstall": "scripts/build.sh -u",
     "delete": "scripts/build.sh -u",
     "watch": "tsc -p tsconfig.json -w"
