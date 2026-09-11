@@ -94,23 +94,20 @@ export class ObscurationManager {
    */
   canRunOnMonitor(
     monitorActor: MonitorActor,
-    toggle: any,
     isOverviewVisible: boolean,
   ): boolean {
     if (!this.settings || !monitorActor) return false;
-    if (!toggle || typeof toggle !== "object" || toggle._isDestroyedByGnome)
-      return false;
 
-    const checked: boolean = !!(toggle as any).checked;
+    const active = this.settings.get_boolean("active");
     const mode: DisplayMode = this.settings.get_string("display-mode");
 
     // Screen mode — check for fullscreen windows
     if (mode === "screen") {
       const activeWs = global.workspace_manager.get_active_workspace();
-      if (!activeWs) return checked;
+      if (!activeWs) return active;
 
       const windowActors = global.get_window_actors();
-      if (!windowActors) return checked;
+      if (!windowActors) return active;
 
       const windows = windowActors
         .map((actor: any) => actor?.meta_window as Meta.Window)
@@ -135,7 +132,7 @@ export class ObscurationManager {
         if (hasFullscreen) return false;
       }
 
-      return checked;
+      return active;
     }
 
     if (isOverviewVisible) return false;
@@ -143,7 +140,7 @@ export class ObscurationManager {
     // Wallpaper mode — check obscuration cache
     const obscured =
       this.monitorObscuredCache.get(monitorActor.monitor.index) ?? false;
-    return !obscured && checked;
+    return !obscured && active;
   }
 
   /**

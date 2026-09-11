@@ -1,4 +1,5 @@
 import GObject from "gi://GObject";
+import Gio from "gi://Gio";
 import Clutter from "gi://Clutter";
 import St from "gi://St";
 import {
@@ -32,12 +33,13 @@ export const WeatherToggle = GObject.registerClass(
 
       this._settings = settings;
 
-      this.checked = this._settings.get_boolean("active");
-      this.connect("notify::checked", () => {
-        if (this._settings) {
-          this._settings.set_boolean("active", this.checked);
-        }
-      });
+      this._settings.bind(
+        "active",
+        this,
+        "checked",
+        Gio.SettingsBindFlags.DEFAULT,
+      );
+      this.connect("notify::checked", () => this._updateButtons());
       const effectType: EffectType = this._settings.get_string("effect-type");
       this.iconName =
         effectType === "snow"
@@ -73,7 +75,7 @@ export const WeatherToggle = GObject.registerClass(
 
       this._snowButton.connectObject("clicked", () => {
         this._settings.set_string("effect-type", "snow");
-        this.checked = true;
+        this._settings.set_boolean("active", true);
         this._updateButtons();
         this.iconName = "weather-snow-symbolic";
       }, this);
@@ -101,7 +103,7 @@ export const WeatherToggle = GObject.registerClass(
 
       this._rainButton.connectObject("clicked", () => {
         this._settings.set_string("effect-type", "rain");
-        this.checked = true;
+        this._settings.set_boolean("active", true);
         this._updateButtons();
         this.iconName = "weather-showers-symbolic";
       }, this);
@@ -128,7 +130,7 @@ export const WeatherToggle = GObject.registerClass(
     _updateButtons() {
       if (!this._settings || !this._snowButton || !this._rainButton) return;
       const effectType: EffectType = this._settings.get_string("effect-type");
-      const isActive = this.checked;
+      const isActive = this._settings.get_boolean("active");
 
       if (effectType === "snow" && isActive) {
         this._snowButton.checked = true;
