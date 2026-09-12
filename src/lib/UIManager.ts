@@ -26,9 +26,9 @@ export const WeatherToggle = GObject.registerClass(
         toggleMode: true,
       });
 
-      this._isDestroyedByGnome = false;
+      this._weatherDestroyed = false;
       this.connect("destroy", (actor: any) => {
-        actor._isDestroyedByGnome = true;
+        actor._weatherDestroyed = true;
       });
 
       this._settings = settings;
@@ -171,11 +171,6 @@ export const WeatherIndicator = GObject.registerClass(
     constructor(settings: any) {
       super();
 
-      this._isDestroyedByGnome = false;
-      this.connect("destroy", (actor: any) => {
-        actor._isDestroyedByGnome = true;
-      });
-
       this._indicator = (this as any)._addIndicator();
       this._indicator.icon_name = "weather-snow-symbolic";
       this._settings = settings;
@@ -200,7 +195,7 @@ export const WeatherIndicator = GObject.registerClass(
         !this._settings ||
         !this.toggle ||
         !this._indicator ||
-        (this.toggle as any)._isDestroyedByGnome
+        (this.toggle as any)._weatherDestroyed
       )
         return;
       const effectType: EffectType = this._settings.get_string("effect-type");

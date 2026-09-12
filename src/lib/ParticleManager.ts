@@ -90,14 +90,14 @@ export class ParticleManager {
 
     if (
       monitorActor.actor &&
-      !(monitorActor.actor as any)._isDestroyedByGnome
+      !(monitorActor.actor as any)._weatherDestroyed
     ) {
       monitorActor.actor.add_child(particle);
     }
 
-    (particle as any)._isDestroyedByGnome = false;
+    (particle as any)._weatherDestroyed = false;
     particle.connect("destroy", (actor: any) => {
-      actor._isDestroyedByGnome = true;
+      actor._weatherDestroyed = true;
     });
     return particle;
   }
@@ -106,7 +106,7 @@ export class ParticleManager {
    * Update particle style
    */
   updateParticleStyle(particle: any, type: EffectType) {
-    if (!this.settings || !particle || (particle as any)._isDestroyedByGnome) {
+    if (!this.settings || !particle || (particle as any)._weatherDestroyed) {
       return;
     }
 
@@ -169,9 +169,9 @@ export class ParticleManager {
     }
 
     if (
-      (particle as any)._isDestroyedByGnome ||
+      (particle as any)._weatherDestroyed ||
       !monitorActor.actor ||
-      (monitorActor.actor as any)._isDestroyedByGnome
+      (monitorActor.actor as any)._weatherDestroyed
     ) {
       return;
     }
@@ -194,10 +194,10 @@ export class ParticleManager {
         onComplete: () => {
           if (
             !particleRef ||
-            (particleRef as any)._isDestroyedByGnome ||
+            (particleRef as any)._weatherDestroyed ||
             !monitorActorRef ||
             !monitorActorRef.actor ||
-            (monitorActorRef.actor as any)._isDestroyedByGnome
+            (monitorActorRef.actor as any)._weatherDestroyed
           ) {
             return;
           }
@@ -218,7 +218,7 @@ export class ParticleManager {
    * Check if particle is of the correct type
    */
   isCorrectType(particle: any, type: EffectType): boolean {
-    if (!this.settings || !particle || (particle as any)._isDestroyedByGnome) {
+    if (!this.settings || !particle || (particle as any)._weatherDestroyed) {
       return false;
     }
 

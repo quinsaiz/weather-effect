@@ -102,7 +102,7 @@ export class ObscurationManager {
     const currentMonitorActors = monitorActors.filter(
       (monitorActor) =>
         !!monitorActor?.actor &&
-        !(monitorActor.actor as any)._isDestroyedByGnome,
+        !(monitorActor.actor as any)._weatherDestroyed,
     );
     const mode: DisplayMode = this.settings.get_string("display-mode");
 

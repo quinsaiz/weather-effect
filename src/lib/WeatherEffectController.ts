@@ -215,8 +215,7 @@ export class WeatherEffectController {
       "monitors-changed",
       () => {
         if (!this._isEnabled) return;
-        this._monitorManager?.destroy();
-        this._monitorManager?.createMonitorActors();
+        this._monitorManager?.rebuildMonitorActors();
         this._recomputeObscuration();
         this._refreshFullscreenStateAndReconcile();
       },
@@ -227,7 +226,10 @@ export class WeatherEffectController {
       "workareas-changed",
       () => {
         if (!this._isEnabled) return;
-        this._monitorManager?.updateMonitorActors();
+        if (!this._monitorManager?.updateMonitorActors()) {
+          this.timeoutId = this._removeTimeout(this.timeoutId);
+          return;
+        }
         this._recomputeObscuration();
         this._refreshFullscreenStateAndReconcile();
       },
@@ -338,13 +340,20 @@ export class WeatherEffectController {
     global.display.connectObject(
       "grab-op-begin",
       () => {
-        if (!this._isEnabled) return;
+        if (
+          !this._isEnabled ||
+          !this._monitorManager?.hasAvailableContainer()
+        )
+          return;
         this._grabDragTimeout = this._removeTimeout(this._grabDragTimeout);
         this._grabDragTimeout = this._addTimeout(
           GLib.PRIORITY_DEFAULT,
           200,
           () => {
-            if (!this._isEnabled) {
+            if (
+              !this._isEnabled ||
+              !this._monitorManager?.hasAvailableContainer()
+            ) {
               this._grabDragTimeout = null;
               return GLib.SOURCE_REMOVE;
             }
@@ -420,10 +429,15 @@ export class WeatherEffectController {
    * Debounced recompute of obscuration.
    */
   private _debouncedRecompute(refreshFullscreenState = false) {
+    if (!this._monitorManager?.hasAvailableContainer()) return;
+
     this._fullscreenRefreshPending ||= refreshFullscreenState;
     this._debounceTimeout = this._removeTimeout(this._debounceTimeout);
     this._debounceTimeout = this._addTimeout(GLib.PRIORITY_DEFAULT, 100, () => {
-      if (!this._isEnabled) {
+      if (
+        !this._isEnabled ||
+        !this._monitorManager?.hasAvailableContainer()
+      ) {
         this._debounceTimeout = null;
         this._fullscreenRefreshPending = false;
         return GLib.SOURCE_REMOVE;
@@ -442,6 +456,11 @@ export class WeatherEffectController {
 
   private _refreshFullscreenStateAndReconcile() {
     if (!this._isEnabled || !this._obscurationManager) return;
+    if (!this._monitorManager?.hasAvailableContainer()) {
+      this._fullscreenRefreshPending = false;
+      this.timeoutId = this._removeTimeout(this.timeoutId);
+      return;
+    }
 
     this._fullscreenRefreshPending = false;
     this._obscurationManager.refreshFullscreenState();
@@ -451,8 +470,14 @@ export class WeatherEffectController {
   /**
    * Reconcile particles and the management source with current monitor state.
    */
-  private _reconcileAnimation(isOverviewVisible = Main.overview.visible) {
-    const canRender = this._maintainParticles(isOverviewVisible);
+  private _reconcileAnimation(isOverviewVisible?: boolean) {
+    if (!this._monitorManager?.hasAvailableContainer()) {
+      this.timeoutId = this._removeTimeout(this.timeoutId);
+      return;
+    }
+
+    const overviewVisible = isOverviewVisible ?? Main.overview.visible;
+    const canRender = this._maintainParticles(overviewVisible);
 
     if (canRender) {
       this._startAnimation();
@@ -461,12 +486,11 @@ export class WeatherEffectController {
     }
   }
 
-  private _maintainParticles(
-    isOverviewVisible = Main.overview.visible,
-  ): boolean {
+  private _maintainParticles(isOverviewVisible?: boolean): boolean {
     if (
       !this._isEnabled ||
       !this._monitorManager ||
+      !this._monitorManager.hasAvailableContainer() ||
       !this._obscurationManager ||
       !this._particleManager ||
       !this._settings
@@ -474,11 +498,12 @@ export class WeatherEffectController {
       return false;
     }
 
+    const overviewVisible = isOverviewVisible ?? Main.overview.visible;
     const monitorActors = this._monitorManager.getMonitorActors();
     const runnableMonitorActors =
       this._obscurationManager.getRunnableMonitorActors(
         monitorActors,
-        isOverviewVisible,
+        overviewVisible,
       );
     const runnableMonitorSet = new Set(runnableMonitorActors);
 
@@ -503,7 +528,13 @@ export class WeatherEffectController {
    * Start particle animation loop.
    */
   private _startAnimation() {
-    if (this.timeoutId || !this._isEnabled || !this._settings) return;
+    if (
+      this.timeoutId ||
+      !this._isEnabled ||
+      !this._monitorManager?.hasAvailableContainer() ||
+      !this._settings
+    )
+      return;
 
     this.timeoutId = this._addTimeout(GLib.PRIORITY_DEFAULT, 50, () => {
       if (!this._isEnabled) {
@@ -530,14 +561,14 @@ export class WeatherEffectController {
     for (const ma of monitorActors) {
       if (
         !ma?.actor ||
-        (ma.actor as any)._isDestroyedByGnome ||
+        (ma.actor as any)._weatherDestroyed ||
         ma.particles.length === 0
       ) {
         continue;
       }
 
       for (const particle of ma.particles) {
-        if (particle && !(particle as any)._isDestroyedByGnome) {
+        if (particle && !(particle as any)._weatherDestroyed) {
           (particle as any)._weatherDisposed = true;
           particle.remove_all_transitions();
         }
@@ -550,7 +581,12 @@ export class WeatherEffectController {
    * Recompute obscuration for all active monitors.
    */
   private _recomputeObscuration() {
-    if (!this._isEnabled || !this._obscurationManager || !this._monitorManager) return;
+    if (
+      !this._isEnabled ||
+      !this._obscurationManager ||
+      !this._monitorManager?.hasAvailableContainer()
+    )
+      return;
     this._obscurationManager.recomputeObscuration(
       this._monitorManager.getMonitorActors(),
     );
@@ -570,7 +606,7 @@ export class WeatherEffectController {
     const baseDuration = this._particleManager.getBaseDuration(speed);
 
     for (const monitorActor of monitorActors) {
-      if (!monitorActor?.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
+      if (!monitorActor?.actor || (monitorActor.actor as any)._weatherDestroyed) {
         continue;
       }
 
@@ -580,7 +616,7 @@ export class WeatherEffectController {
       // Remove excess particles
       while (monitorActor.particles.length > targetParticleCount) {
         const particle = monitorActor.particles.pop();
-        if (particle && !(particle as any)._isDestroyedByGnome) {
+        if (particle && !(particle as any)._weatherDestroyed) {
           particle.remove_all_transitions();
           particle.destroy();
         }
@@ -618,7 +654,7 @@ export class WeatherEffectController {
 
         if (
           !particle ||
-          (particle as any)._isDestroyedByGnome ||
+          (particle as any)._weatherDestroyed ||
           (particle as any)._weatherDisposed ||
           !particle.get_parent()
         ) {
@@ -671,11 +707,12 @@ export class WeatherEffectController {
     if (!this._isEnabled) return;
 
     if (
+      !this._monitorManager?.hasAvailableContainer() ||
       !particle ||
-      (particle as any)._isDestroyedByGnome ||
+      (particle as any)._weatherDestroyed ||
       (particle as any)._weatherDisposed ||
       !monitorActor?.actor ||
-      (monitorActor.actor as any)._isDestroyedByGnome ||
+      (monitorActor.actor as any)._weatherDestroyed ||
       typeof (particle as any).get_parent !== "function"
     ) {
       return;
@@ -713,7 +750,7 @@ export class WeatherEffectController {
    * Safely destroy a particle and remove it from monitor tracking.
    */
   private _safeDestroyParticle(particle: any, monitorActor: MonitorActor) {
-    if (particle && !(particle as any)._isDestroyedByGnome) {
+    if (particle && !(particle as any)._weatherDestroyed) {
       (particle as any)._weatherDisposed = true;
       particle.remove_all_transitions();
       particle.destroy();

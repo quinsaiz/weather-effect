@@ -15,15 +15,72 @@ export interface MonitorActor {
 export class MonitorManager {
   private monitorActors: MonitorActor[] = [];
   private settings: any;
+  private uiGroup: Clutter.Actor | null = null;
+  private uiGroupDestroyId: number | null = null;
+  private backgroundGroup: Clutter.Actor | null = null;
+  private backgroundGroupDestroyId: number | null = null;
+  private wallpaperUsesUiGroup = false;
+  private shellContainersAvailable = true;
 
   constructor(settings: any) {
     this.settings = settings;
+
+    this.uiGroup = Main.layoutManager.uiGroup;
+    if (this.uiGroup) {
+      this.uiGroupDestroyId = this.uiGroup.connect("destroy", () => {
+        this.shellContainersAvailable = false;
+        this.uiGroup = null;
+        this.uiGroupDestroyId = null;
+      });
+    } else {
+      this.shellContainersAvailable = false;
+    }
+
+    this.backgroundGroup =
+      (Main.layoutManager as any).backgroundGroup ??
+      (Main.layoutManager as any)._backgroundGroup ??
+      null;
+    this.wallpaperUsesUiGroup = !this.backgroundGroup;
+
+    if (this.backgroundGroup) {
+      this.backgroundGroupDestroyId = this.backgroundGroup.connect(
+        "destroy",
+        () => {
+          this.shellContainersAvailable = false;
+          this.backgroundGroup = null;
+          this.backgroundGroupDestroyId = null;
+        },
+      );
+    }
+  }
+
+  hasAvailableContainer(): boolean {
+    return this.getTargetContainer() !== null;
+  }
+
+  private getTargetContainer(): Clutter.Actor | null {
+    if (!this.settings || !this.shellContainersAvailable) return null;
+
+    const mode = this.settings.get_string("display-mode") as
+      | "screen"
+      | "wallpaper";
+
+    if (mode === "wallpaper" && !this.wallpaperUsesUiGroup) {
+      return this.backgroundGroup;
+    }
+
+    return this.uiGroup;
   }
 
   /**
    * Create actors for all monitors
    */
   createMonitorActors(): MonitorActor[] {
+    if (!this.hasAvailableContainer()) {
+      this.monitorActors = [];
+      return this.monitorActors;
+    }
+
     const monitors = Main.layoutManager.monitors;
     this.monitorActors = [];
 
@@ -37,9 +94,9 @@ export class MonitorManager {
         y: monitor.y,
       });
 
-      (actor as any)._isDestroyedByGnome = false;
+      (actor as any)._weatherDestroyed = false;
       actor.connect("destroy", (a: any) => {
-        a._isDestroyedByGnome = true;
+        a._weatherDestroyed = true;
       });
 
       this.monitorActors.push({
@@ -56,43 +113,32 @@ export class MonitorManager {
   /**
    * Attach actors to the scene
    */
-  attachMonitorActors() {
-    if (!this.settings) return;
-
-    const uiGroup = Main.layoutManager.uiGroup;
-    if (!uiGroup || (uiGroup as any)._isDestroyedByGnome) return;
-
-    const mode = this.settings.get_string("display-mode") as
-      | "screen"
-      | "wallpaper";
-    const backgroundGroup =
-      (Main.layoutManager as any).backgroundGroup ??
-      (Main.layoutManager as any)._backgroundGroup;
+  attachMonitorActors(): boolean {
+    const targetContainer = this.getTargetContainer();
+    if (!targetContainer) return false;
 
     for (const monitorActor of this.monitorActors) {
       if (
         !monitorActor.actor ||
-        (monitorActor.actor as any)._isDestroyedByGnome
+        (monitorActor.actor as any)._weatherDestroyed
       )
         continue;
 
       const parent = monitorActor.actor.get_parent();
       if (parent) parent.remove_child(monitorActor.actor);
 
-      if (mode === "screen" || !backgroundGroup) {
-        uiGroup.add_child(monitorActor.actor);
-      } else {
-        backgroundGroup.add_child(monitorActor.actor);
-      }
+      targetContainer.add_child(monitorActor.actor);
     }
 
-    this.updateMonitorActors();
+    return this.updateMonitorActors();
   }
 
   /**
    * Update actor sizes and positions
    */
-  updateMonitorActors() {
+  updateMonitorActors(): boolean {
+    if (!this.hasAvailableContainer()) return false;
+
     const monitors = Main.layoutManager.monitors;
     let needReattach = false;
 
@@ -102,7 +148,7 @@ export class MonitorManager {
 
       if (
         !monitorActor?.actor ||
-        (monitorActor.actor as any)._isDestroyedByGnome
+        (monitorActor.actor as any)._weatherDestroyed
       ) {
         this.monitorActors.splice(i, 1);
         continue;
@@ -135,26 +181,39 @@ export class MonitorManager {
         y: monitor.y,
       });
 
-      (actor as any)._isDestroyedByGnome = false;
+      (actor as any)._weatherDestroyed = false;
       actor.connect("destroy", (a: any) => {
-        a._isDestroyedByGnome = true;
+        a._weatherDestroyed = true;
       });
 
       this.monitorActors.push({ actor, monitor, particles: [] });
       needReattach = true;
     }
 
-    if (needReattach) this.attachMonitorActors();
+    if (needReattach) return this.attachMonitorActors();
+    return true;
+  }
+
+  rebuildMonitorActors(): MonitorActor[] {
+    this.destroyMonitorActors();
+    return this.createMonitorActors();
   }
 
   /**
    * Destroy all actors
    */
   destroy() {
+    this.destroyMonitorActors();
+    this.disconnectShellContainerHandlers();
+    this.shellContainersAvailable = false;
+    this.settings = null;
+  }
+
+  private destroyMonitorActors() {
     for (const monitorActor of this.monitorActors) {
       if (monitorActor) {
         monitorActor.particles.forEach((p) => {
-          if (p && !(p as any)._isDestroyedByGnome) {
+          if (p && !(p as any)._weatherDestroyed) {
             (p as any)._weatherDisposed = true;
             p.remove_all_transitions();
             p.destroy();
@@ -163,7 +222,7 @@ export class MonitorManager {
         monitorActor.particles = [];
         if (
           monitorActor.actor &&
-          !(monitorActor.actor as any)._isDestroyedByGnome
+          !(monitorActor.actor as any)._weatherDestroyed
         ) {
           monitorActor.actor.destroy();
           monitorActor.actor = null;
@@ -171,6 +230,26 @@ export class MonitorManager {
       }
     }
     this.monitorActors = [];
+  }
+
+  private disconnectShellContainerHandlers() {
+    if (
+      this.uiGroupDestroyId !== null &&
+      this.uiGroup
+    ) {
+      this.uiGroup.disconnect(this.uiGroupDestroyId);
+    }
+    this.uiGroupDestroyId = null;
+    this.uiGroup = null;
+
+    if (
+      this.backgroundGroupDestroyId !== null &&
+      this.backgroundGroup
+    ) {
+      this.backgroundGroup.disconnect(this.backgroundGroupDestroyId);
+    }
+    this.backgroundGroupDestroyId = null;
+    this.backgroundGroup = null;
   }
 
   /**
@@ -190,14 +269,14 @@ export class MonitorManager {
 
     if (
       !monitorActor.actor ||
-      (monitorActor.actor as any)._isDestroyedByGnome
+      (monitorActor.actor as any)._weatherDestroyed
     ) {
       monitorActor.particles = [];
       return;
     }
 
     monitorActor.particles.forEach((p) => {
-      if (p && !(p as any)._isDestroyedByGnome) {
+      if (p && !(p as any)._weatherDestroyed) {
         (p as any)._weatherDisposed = true;
         p.remove_all_transitions();
         p.destroy();

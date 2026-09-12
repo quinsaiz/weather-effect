@@ -16,7 +16,7 @@ declare module "gi://St" {
 declare module "@girs/clutter-14" {
     export namespace Clutter {
         interface Actor {
-            _isDestroyedByGnome?: boolean;
+            _weatherDestroyed?: boolean;
             _weatherDisposed?: boolean;
         }
     }
@@ -25,7 +25,7 @@ declare module "@girs/clutter-14" {
 declare module "@girs/st-15" {
     export namespace St {
         interface Widget {
-            _isDestroyedByGnome?: boolean;
+            _weatherDestroyed?: boolean;
             _weatherDisposed?: boolean;
         }
     }
@@ -34,7 +34,7 @@ declare module "@girs/st-15" {
 declare module "resource:///org/gnome/shell/ui/quickSettings.js" {
     export class QuickMenuToggle {
         constructor(params: any);
-        _isDestroyedByGnome?: boolean;
+        _weatherDestroyed?: boolean;
         menu: any;
         checked: boolean;
         iconName: string;
@@ -46,7 +46,6 @@ declare module "resource:///org/gnome/shell/ui/quickSettings.js" {
     }
     export class SystemIndicator {
         constructor();
-        _isDestroyedByGnome?: boolean;
         quickSettingsItems: any[];
         connect(signal: string, callback: Function): number;
         disconnect(id: number): void;
