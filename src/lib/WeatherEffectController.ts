@@ -2,11 +2,10 @@ import GLib from "gi://GLib";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
 import { WeatherIndicator } from "./UIManager.js";
-import { MonitorManager, MonitorActor } from "./MonitorManager.js";
+import { MonitorManager } from "./MonitorManager.js";
 import { ObscurationManager } from "./ObscurationManager.js";
-import { ParticleManager } from "./ParticleManager.js";
+import { EffectType, ParticleManager } from "./ParticleManager.js";
 
-type EffectType = "snow" | "rain";
 type DisplayMode = "wallpaper" | "screen";
 
 /**
@@ -73,10 +72,7 @@ export class WeatherEffectController {
     // Initialize managers
     this._monitorManager = new MonitorManager(this._settings);
     this._obscurationManager = new ObscurationManager(this._settings);
-    this._particleManager = new ParticleManager(
-      this._settings,
-      this._onParticleAnimationComplete.bind(this),
-    );
+    this._particleManager = new ParticleManager(this._settings);
 
     // Create UI if configured
     if (this._settings.get_boolean("show-in-quick-settings")) {
@@ -215,6 +211,7 @@ export class WeatherEffectController {
       "monitors-changed",
       () => {
         if (!this._isEnabled) return;
+        this._particleManager?.clearAll();
         this._monitorManager?.rebuildMonitorActors();
         this._recomputeObscuration();
         this._refreshFullscreenStateAndReconcile();
@@ -228,6 +225,7 @@ export class WeatherEffectController {
         if (!this._isEnabled) return;
         if (!this._monitorManager?.updateMonitorActors()) {
           this.timeoutId = this._removeTimeout(this.timeoutId);
+          this._particleManager?.clearAll();
           return;
         }
         this._recomputeObscuration();
@@ -243,11 +241,7 @@ export class WeatherEffectController {
         if (!this._isEnabled) return;
         const mode: DisplayMode = this._settings.get_string("display-mode");
         if (mode === "wallpaper") {
-          this._monitorManager?.getMonitorActors().forEach((ma) => {
-            if (ma.particles.length > 0) {
-              this._monitorManager?.clearParticles(ma);
-            }
-          });
+          this._particleManager?.clearAll();
         }
         this._debouncedRecompute(true);
       },
@@ -421,6 +415,7 @@ export class WeatherEffectController {
       this._obscurationManager = null;
     }
 
+    this._particleManager?.destroy();
     this._particleManager = null;
     this._settings = null;
   }
@@ -459,6 +454,7 @@ export class WeatherEffectController {
     if (!this._monitorManager?.hasAvailableContainer()) {
       this._fullscreenRefreshPending = false;
       this.timeoutId = this._removeTimeout(this.timeoutId);
+      this._particleManager?.clearAll();
       return;
     }
 
@@ -473,6 +469,7 @@ export class WeatherEffectController {
   private _reconcileAnimation(isOverviewVisible?: boolean) {
     if (!this._monitorManager?.hasAvailableContainer()) {
       this.timeoutId = this._removeTimeout(this.timeoutId);
+      this._particleManager?.clearAll();
       return;
     }
 
@@ -505,22 +502,23 @@ export class WeatherEffectController {
         monitorActors,
         overviewVisible,
       );
-    const runnableMonitorSet = new Set(runnableMonitorActors);
 
-    for (const monitorActor of monitorActors) {
-      if (
-        !runnableMonitorSet.has(monitorActor) &&
-        monitorActor.particles.length > 0
-      ) {
-        this._monitorManager.clearParticles(monitorActor);
-      }
-    }
+    const type: EffectType = this._settings.get_string("effect-type");
+    const count = this._settings.get_int("particle-count");
+    const speed = this._settings.get_int("speed");
+    const targets = runnableMonitorActors.map((monitorActor) => ({
+      monitorActor,
+      type,
+      count,
+      speed,
+    }));
+
+    this._particleManager.reconcile(monitorActors, targets);
 
     if (runnableMonitorActors.length === 0) {
       return false;
     }
 
-    this._manageParticles(runnableMonitorActors);
     return true;
   }
 
@@ -550,31 +548,11 @@ export class WeatherEffectController {
   }
 
   /**
-   * Stop animation and clean up particles cleanly without silent try-catch blocks.
+   * Stop animation and retire all particles.
    */
   private _stopAnimation() {
     this.timeoutId = this._removeTimeout(this.timeoutId);
-
-    if (!this._monitorManager) return;
-    const monitorActors = this._monitorManager.getMonitorActors();
-
-    for (const ma of monitorActors) {
-      if (
-        !ma?.actor ||
-        (ma.actor as any)._weatherDestroyed ||
-        ma.particles.length === 0
-      ) {
-        continue;
-      }
-
-      for (const particle of ma.particles) {
-        if (particle && !(particle as any)._weatherDestroyed) {
-          (particle as any)._weatherDisposed = true;
-          particle.remove_all_transitions();
-        }
-      }
-      this._monitorManager.clearParticles(ma);
-    }
+    this._particleManager?.clearAll();
   }
 
   /**
@@ -590,176 +568,6 @@ export class WeatherEffectController {
     this._obscurationManager.recomputeObscuration(
       this._monitorManager.getMonitorActors(),
     );
-  }
-
-  /**
-   * Animate and manage particles on runnable monitors.
-   */
-  private _manageParticles(monitorActors: MonitorActor[]) {
-    if (!this._isEnabled || !this._monitorManager || !this._particleManager || !this._settings) {
-      return;
-    }
-
-    const type: EffectType = this._settings.get_string("effect-type");
-    const targetParticleCount = this._settings.get_int("particle-count");
-    const speed = this._settings.get_int("speed");
-    const baseDuration = this._particleManager.getBaseDuration(speed);
-
-    for (const monitorActor of monitorActors) {
-      if (!monitorActor?.actor || (monitorActor.actor as any)._weatherDestroyed) {
-        continue;
-      }
-
-      const screenWidth = Math.max(1, monitorActor.monitor.width);
-      const screenHeight = Math.max(1, monitorActor.monitor.height);
-
-      // Remove excess particles
-      while (monitorActor.particles.length > targetParticleCount) {
-        const particle = monitorActor.particles.pop();
-        if (particle && !(particle as any)._weatherDestroyed) {
-          particle.remove_all_transitions();
-          particle.destroy();
-        }
-      }
-
-      // Add missing particles
-      if (monitorActor.particles.length < targetParticleCount) {
-        const toAdd = targetParticleCount - monitorActor.particles.length;
-
-        for (let i = 0; i < toAdd; i++) {
-          if (!this._isEnabled) break;
-
-          const particle = this._particleManager.createParticle(
-            type,
-            monitorActor,
-            screenWidth,
-          );
-
-          if (particle) {
-            particle.y = Math.random() * screenHeight - 20;
-            monitorActor.particles.push(particle);
-            this._particleManager.animateSingleParticle(
-              particle,
-              monitorActor,
-              screenHeight,
-              baseDuration,
-            );
-          }
-        }
-      }
-
-      // Clean up disposed or mismatched particles without silent try-catch blocks
-      for (let i = monitorActor.particles.length - 1; i >= 0; i--) {
-        const particle = monitorActor.particles[i];
-
-        if (
-          !particle ||
-          (particle as any)._weatherDestroyed ||
-          (particle as any)._weatherDisposed ||
-          !particle.get_parent()
-        ) {
-          monitorActor.particles.splice(i, 1);
-          continue;
-        }
-
-        if (!this._particleManager.isCorrectType(particle, type)) {
-          const currentX = particle.x;
-          const currentY = particle.y;
-
-          (particle as any)._weatherDisposed = true;
-          particle.remove_all_transitions();
-          particle.destroy();
-          monitorActor.particles.splice(i, 1);
-
-          if (!this._isEnabled) continue;
-
-          const newParticle = this._particleManager.createParticle(
-            type,
-            monitorActor,
-            screenWidth,
-          );
-
-          if (newParticle) {
-            newParticle.x = currentX;
-            newParticle.y = currentY;
-            monitorActor.particles.push(newParticle);
-            this._particleManager.animateSingleParticle(
-              newParticle,
-              monitorActor,
-              screenHeight,
-              baseDuration,
-            );
-          }
-        }
-      }
-    }
-  }
-
-  /**
-   * Handler invoked when a particle animation completes.
-   */
-  private _onParticleAnimationComplete(
-    particle: any,
-    monitorActor: MonitorActor,
-    screenHeight: number,
-    baseDuration: number,
-  ) {
-    if (!this._isEnabled) return;
-
-    if (
-      !this._monitorManager?.hasAvailableContainer() ||
-      !particle ||
-      (particle as any)._weatherDestroyed ||
-      (particle as any)._weatherDisposed ||
-      !monitorActor?.actor ||
-      (monitorActor.actor as any)._weatherDestroyed ||
-      typeof (particle as any).get_parent !== "function"
-    ) {
-      return;
-    }
-
-    const monitorActors = this._monitorManager!.getMonitorActors();
-    if (!monitorActors.includes(monitorActor)) return;
-
-    particle.y = -20;
-    particle.x = Math.random() * Math.max(1, monitorActor.monitor.width);
-
-    const updatedType: EffectType = this._settings.get_string("effect-type");
-    const updatedSpeed = this._settings.get_int("speed");
-    const updatedBaseDuration = this._particleManager!.getBaseDuration(updatedSpeed);
-
-    this._particleManager!.updateParticleStyle(particle, updatedType);
-
-    const canRun =
-      this._settings.get_boolean("active") &&
-      this.timeoutId !== null;
-
-    if (canRun) {
-      this._particleManager!.animateSingleParticle(
-        particle,
-        monitorActor,
-        screenHeight,
-        updatedBaseDuration,
-      );
-    } else {
-      this._safeDestroyParticle(particle, monitorActor);
-    }
-  }
-
-  /**
-   * Safely destroy a particle and remove it from monitor tracking.
-   */
-  private _safeDestroyParticle(particle: any, monitorActor: MonitorActor) {
-    if (particle && !(particle as any)._weatherDestroyed) {
-      (particle as any)._weatherDisposed = true;
-      particle.remove_all_transitions();
-      particle.destroy();
-    }
-
-    const index = monitorActor.particles.indexOf(particle);
-    if (index !== -1) {
-      monitorActor.particles.splice(index, 1);
-    }
   }
 
 }

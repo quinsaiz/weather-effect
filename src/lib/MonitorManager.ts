@@ -1,12 +1,10 @@
 import Clutter from "gi://Clutter";
-import St from "gi://St";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
 
 export interface MonitorActor {
   actor: Clutter.Actor | null;
   monitor: any;
-  particles: St.Widget[];
 }
 
 /**
@@ -86,24 +84,7 @@ export class MonitorManager {
 
     for (let i = 0; i < monitors.length; i++) {
       const monitor = monitors[i];
-      const actor = new Clutter.Actor({
-        width: monitor.width,
-        height: monitor.height,
-        reactive: false,
-        x: monitor.x,
-        y: monitor.y,
-      });
-
-      (actor as any)._weatherDestroyed = false;
-      actor.connect("destroy", (a: any) => {
-        a._weatherDestroyed = true;
-      });
-
-      this.monitorActors.push({
-        actor: actor,
-        monitor: monitor,
-        particles: [],
-      });
+      this.monitorActors.push(this.createMonitorActor(monitor));
     }
 
     this.attachMonitorActors();
@@ -160,9 +141,8 @@ export class MonitorManager {
       );
 
       if (!exists) {
-        monitorActor.particles = [];
-        monitorActor.actor.destroy();
         this.monitorActors.splice(i, 1);
+        monitorActor.actor.destroy();
       }
     }
 
@@ -173,20 +153,7 @@ export class MonitorManager {
       );
       if (exists) continue;
 
-      const actor = new Clutter.Actor({
-        width: monitor.width,
-        height: monitor.height,
-        reactive: false,
-        x: monitor.x,
-        y: monitor.y,
-      });
-
-      (actor as any)._weatherDestroyed = false;
-      actor.connect("destroy", (a: any) => {
-        a._weatherDestroyed = true;
-      });
-
-      this.monitorActors.push({ actor, monitor, particles: [] });
+      this.monitorActors.push(this.createMonitorActor(monitor));
       needReattach = true;
     }
 
@@ -210,16 +177,11 @@ export class MonitorManager {
   }
 
   private destroyMonitorActors() {
-    for (const monitorActor of this.monitorActors) {
+    const monitorActors = this.monitorActors;
+    this.monitorActors = [];
+
+    for (const monitorActor of monitorActors) {
       if (monitorActor) {
-        monitorActor.particles.forEach((p) => {
-          if (p && !(p as any)._weatherDestroyed) {
-            (p as any)._weatherDisposed = true;
-            p.remove_all_transitions();
-            p.destroy();
-          }
-        });
-        monitorActor.particles = [];
         if (
           monitorActor.actor &&
           !(monitorActor.actor as any)._weatherDestroyed
@@ -229,7 +191,28 @@ export class MonitorManager {
         }
       }
     }
-    this.monitorActors = [];
+  }
+
+  private createMonitorActor(monitor: any): MonitorActor {
+    const actor = new Clutter.Actor({
+      width: monitor.width,
+      height: monitor.height,
+      reactive: false,
+      x: monitor.x,
+      y: monitor.y,
+    });
+    const monitorActor: MonitorActor = { actor, monitor };
+
+    (actor as any)._weatherDestroyed = false;
+    actor.connect("destroy", (destroyedActor: any) => {
+      destroyedActor._weatherDestroyed = true;
+      monitorActor.actor = null;
+
+      const index = this.monitorActors.indexOf(monitorActor);
+      if (index !== -1) this.monitorActors.splice(index, 1);
+    });
+
+    return monitorActor;
   }
 
   private disconnectShellContainerHandlers() {
@@ -257,31 +240,5 @@ export class MonitorManager {
    */
   getMonitorActors(): MonitorActor[] {
     return this.monitorActors;
-  }
-
-  /**
-   * Clear particles from a monitor
-   */
-  clearParticles(monitorActor: MonitorActor) {
-    if (!monitorActor) {
-      return;
-    }
-
-    if (
-      !monitorActor.actor ||
-      (monitorActor.actor as any)._weatherDestroyed
-    ) {
-      monitorActor.particles = [];
-      return;
-    }
-
-    monitorActor.particles.forEach((p) => {
-      if (p && !(p as any)._weatherDestroyed) {
-        (p as any)._weatherDisposed = true;
-        p.remove_all_transitions();
-        p.destroy();
-      }
-    });
-    monitorActor.particles = [];
   }
 }

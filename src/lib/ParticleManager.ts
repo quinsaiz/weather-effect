@@ -1,148 +1,421 @@
 import Clutter from "gi://Clutter";
 import St from "gi://St";
+
 import { MonitorActor } from "./MonitorManager.js";
 
-type EffectType = "snow" | "rain";
+export type EffectType = "snow" | "rain";
+
+export interface ParticleTarget {
+  monitorActor: MonitorActor;
+  type: EffectType;
+  count: number;
+  speed: number;
+}
+
+interface MonitorParticleState {
+  particles: St.Widget[];
+  target: ParticleTarget | null;
+  monitorDestroyId: number | null;
+}
 
 /**
- * Management of particle creation and animation
+ * Owns particle creation, animation, reconciliation, and retirement.
  */
 export class ParticleManager {
   private settings: any;
-  private onAnimationFrame: (
-    particle: St.Widget,
-    monitorActor: MonitorActor,
-    screenHeight: number,
-    baseDuration: number,
-  ) => void;
+  private monitorStates: Map<MonitorActor, MonitorParticleState> = new Map();
 
-  constructor(
-    settings: any,
-    onAnimationFrame: (
-      particle: St.Widget,
-      monitorActor: MonitorActor,
-      screenHeight: number,
-      baseDuration: number,
-    ) => void,
-  ) {
+  constructor(settings: any) {
     this.settings = settings;
-    this.onAnimationFrame = onAnimationFrame;
   }
 
-  /**
-   * Create a particle
-   */
-  createParticle(
-    type: EffectType,
+  reconcile(
+    liveMonitorActors: readonly MonitorActor[],
+    targets: readonly ParticleTarget[],
+  ): void {
+    if (!this.settings) return;
+
+    const liveMonitorSet = new Set(
+      liveMonitorActors.filter(
+        (monitorActor) =>
+          !!monitorActor.actor &&
+          !(monitorActor.actor as any)._weatherDestroyed,
+      ),
+    );
+
+    for (const [monitorActor, state] of this.monitorStates) {
+      if (!liveMonitorSet.has(monitorActor)) {
+        this.retireMonitorState(monitorActor, state);
+      }
+    }
+
+    for (const monitorActor of liveMonitorSet) {
+      this.ensureMonitorState(monitorActor);
+    }
+
+    const targetByMonitor = new Map(
+      targets.map((target) => [target.monitorActor, target]),
+    );
+
+    for (const monitorActor of liveMonitorSet) {
+      const state = this.monitorStates.get(monitorActor);
+      if (!state) continue;
+
+      const target = targetByMonitor.get(monitorActor) ?? null;
+      state.target = target;
+
+      if (target) {
+        this.reconcileMonitorState(monitorActor, state, target);
+      } else {
+        this.clearMonitorState(state);
+      }
+    }
+  }
+
+  clearMonitor(monitorActor: MonitorActor): void {
+    const state = this.monitorStates.get(monitorActor);
+    if (!state) return;
+
+    state.target = null;
+    this.clearMonitorState(state);
+  }
+
+  clearAll(): void {
+    for (const state of this.monitorStates.values()) {
+      state.target = null;
+      this.clearMonitorState(state);
+    }
+  }
+
+  destroy(): void {
+    this.clearAll();
+
+    for (const [monitorActor, state] of this.monitorStates) {
+      const actor = monitorActor.actor;
+      if (
+        state.monitorDestroyId !== null &&
+        actor &&
+        !(actor as any)._weatherDestroyed
+      ) {
+        actor.disconnect(state.monitorDestroyId);
+      }
+      state.monitorDestroyId = null;
+      state.particles = [];
+    }
+
+    this.monitorStates.clear();
+    this.settings = null;
+  }
+
+  private ensureMonitorState(
     monitorActor: MonitorActor,
-    screenWidth: number,
-  ): St.Widget {
-    if (!this.settings || !monitorActor || !monitorActor.actor) {
-      throw new Error("Invalid parameters for createParticle");
+  ): MonitorParticleState | null {
+    const existingState = this.monitorStates.get(monitorActor);
+    if (existingState) return existingState;
+
+    const actor = monitorActor.actor;
+    if (!actor || (actor as any)._weatherDestroyed) return null;
+
+    const state: MonitorParticleState = {
+      particles: [],
+      target: null,
+      monitorDestroyId: null,
+    };
+
+    state.monitorDestroyId = actor.connect("destroy", () => {
+      state.monitorDestroyId = null;
+      state.target = null;
+      state.particles = [];
+      this.monitorStates.delete(monitorActor);
+    });
+    this.monitorStates.set(monitorActor, state);
+    return state;
+  }
+
+  private retireMonitorState(
+    monitorActor: MonitorActor,
+    state: MonitorParticleState,
+  ): void {
+    state.target = null;
+    const actor = monitorActor.actor;
+
+    if (actor && !(actor as any)._weatherDestroyed) {
+      this.clearMonitorState(state);
+      if (state.monitorDestroyId !== null) {
+        actor.disconnect(state.monitorDestroyId);
+      }
+    } else {
+      state.particles = [];
+    }
+
+    state.monitorDestroyId = null;
+    this.monitorStates.delete(monitorActor);
+  }
+
+  private reconcileMonitorState(
+    monitorActor: MonitorActor,
+    state: MonitorParticleState,
+    target: ParticleTarget,
+  ): void {
+    const actor = monitorActor.actor;
+    if (!actor || (actor as any)._weatherDestroyed) return;
+
+    while (state.particles.length > target.count) {
+      const particle = state.particles.pop();
+      if (particle) this.retireParticle(state, particle, false);
+    }
+
+    while (state.particles.length < target.count) {
+      const particle = this.createParticle(monitorActor, state, target.type);
+      if (!particle) break;
+
+      particle.y = Math.random() * Math.max(1, monitorActor.monitor.height) - 20;
+      state.particles.push(particle);
+      this.animateParticle(monitorActor, state, particle, target.speed);
+    }
+
+    for (let index = state.particles.length - 1; index >= 0; index--) {
+      const particle = state.particles[index];
+
+      if (
+        !particle ||
+        (particle as any)._weatherDestroyed ||
+        (particle as any)._weatherDisposed
+      ) {
+        state.particles.splice(index, 1);
+        continue;
+      }
+
+      if (!this.isCorrectType(particle, target.type)) {
+        const currentX = particle.x;
+        const currentY = particle.y;
+
+        this.retireParticle(state, particle, true);
+
+        if (!state.target) continue;
+
+        const replacement = this.createParticle(
+          monitorActor,
+          state,
+          target.type,
+        );
+        if (!replacement) continue;
+
+        replacement.x = currentX;
+        replacement.y = currentY;
+        state.particles.push(replacement);
+        this.animateParticle(monitorActor, state, replacement, target.speed);
+      }
+    }
+  }
+
+  private createParticle(
+    monitorActor: MonitorActor,
+    state: MonitorParticleState,
+    type: EffectType,
+  ): St.Widget | null {
+    const actor = monitorActor.actor;
+    if (!this.settings || !actor || (actor as any)._weatherDestroyed) {
+      return null;
     }
 
     const size = this.settings.get_int("particle-size");
     const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
     const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();
-    const safeScreenWidth = Math.max(1, screenWidth);
-    const safeX = Math.random() * safeScreenWidth;
+    const x = Math.random() * Math.max(1, monitorActor.monitor.width);
 
     let particle: St.Widget;
     if (type === "snow") {
-        if (snowEmoji && snowEmoji !== "") {
-          particle = new St.Label({
-            text: snowEmoji,
-            style: `font-size: ${size}px; color: ${this.settings.get_string(
-              "snow-color",
-            )};`,
-            x: safeX,
-            y: -20,
-          });
-        } else {
-          particle = new St.Widget({
-            style: `background-color: ${this.settings.get_string(
-              "snow-color",
-            )}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`,
-            x: safeX,
-            y: -20,
-          });
-        }
+      if (snowEmoji) {
+        particle = new St.Label({
+          text: snowEmoji,
+          style: `font-size: ${size}px; color: ${this.settings.get_string(
+            "snow-color",
+          )};`,
+          x,
+          y: -20,
+        });
       } else {
-        if (rainEmoji && rainEmoji !== "") {
-          particle = new St.Label({
-            text: rainEmoji,
-            style: `font-size: ${size}px; color: ${this.settings.get_string(
-              "rain-color",
-            )};`,
-            x: safeX,
-            y: -20,
-          });
-        } else {
-          particle = new St.Widget({
-            style: `background-color: ${this.settings.get_string(
-              "rain-color",
-            )}; width: ${size / 2}px; height: ${size * 2}px;`,
-            x: safeX,
-            y: -20,
-          });
-        }
+        particle = new St.Widget({
+          style: `background-color: ${this.settings.get_string(
+            "snow-color",
+          )}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`,
+          x,
+          y: -20,
+        });
       }
-
-    if (
-      monitorActor.actor &&
-      !(monitorActor.actor as any)._weatherDestroyed
-    ) {
-      monitorActor.actor.add_child(particle);
+    } else if (rainEmoji) {
+      particle = new St.Label({
+        text: rainEmoji,
+        style: `font-size: ${size}px; color: ${this.settings.get_string(
+          "rain-color",
+        )};`,
+        x,
+        y: -20,
+      });
+    } else {
+      particle = new St.Widget({
+        style: `background-color: ${this.settings.get_string(
+          "rain-color",
+        )}; width: ${size / 2}px; height: ${size * 2}px;`,
+        x,
+        y: -20,
+      });
     }
 
     (particle as any)._weatherDestroyed = false;
-    particle.connect("destroy", (actor: any) => {
-      actor._weatherDestroyed = true;
+    particle.connect("destroy", (destroyedParticle: any) => {
+      destroyedParticle._weatherDestroyed = true;
+      const index = state.particles.indexOf(destroyedParticle);
+      if (index !== -1) state.particles.splice(index, 1);
     });
+    actor.add_child(particle);
     return particle;
   }
 
-  /**
-   * Update particle style
-   */
-  updateParticleStyle(particle: any, type: EffectType) {
-    if (!this.settings || !particle || (particle as any)._weatherDestroyed) {
+  private animateParticle(
+    monitorActor: MonitorActor,
+    state: MonitorParticleState,
+    particle: St.Widget,
+    speed: number,
+  ): void {
+    const actor = monitorActor.actor;
+    if (
+      (particle as any)._weatherDestroyed ||
+      (particle as any)._weatherDisposed ||
+      !actor ||
+      (actor as any)._weatherDestroyed
+    ) {
       return;
     }
+
+    const screenHeight = Math.max(1, monitorActor.monitor.height);
+    const baseDuration = this.getBaseDuration(speed);
+    const targetY = screenHeight + 20;
+    const totalDistance = targetY + 20;
+    const distanceToTravel = Math.max(1, targetY - particle.y);
+    const duration =
+      (distanceToTravel / totalDistance) *
+      (baseDuration + Math.random() * 500);
+
+    particle.show();
+    particle.ease({
+      y: targetY,
+      duration,
+      mode: Clutter.AnimationMode.LINEAR,
+      onComplete: () => {
+        this.handleTransitionComplete(monitorActor, state, particle);
+      },
+    });
+  }
+
+  private handleTransitionComplete(
+    monitorActor: MonitorActor,
+    state: MonitorParticleState,
+    particle: St.Widget,
+  ): void {
+    if (
+      (particle as any)._weatherDestroyed ||
+      (particle as any)._weatherDisposed
+    ) {
+      return;
+    }
+
+    const actor = monitorActor.actor;
+    if (!actor || (actor as any)._weatherDestroyed) return;
+    if (
+      !this.settings ||
+      this.monitorStates.get(monitorActor) !== state ||
+      !state.target ||
+      !state.particles.includes(particle)
+    ) {
+      return;
+    }
+
+    particle.y = -20;
+    particle.x = Math.random() * Math.max(1, monitorActor.monitor.width);
+
+    const type: EffectType = this.settings.get_string("effect-type");
+    const speed = this.settings.get_int("speed");
+    this.updateParticleStyle(particle, type);
+
+    if (!this.settings.get_boolean("active")) {
+      this.retireParticle(state, particle, true);
+      return;
+    }
+
+    this.animateParticle(monitorActor, state, particle, speed);
+  }
+
+  private clearMonitorState(state: MonitorParticleState): void {
+    for (const particle of [...state.particles]) {
+      this.retireParticle(state, particle, true);
+    }
+    state.particles = [];
+  }
+
+  private retireParticle(
+    state: MonitorParticleState,
+    particle: St.Widget,
+    markDisposed: boolean,
+  ): void {
+    const index = state.particles.indexOf(particle);
+    if (index !== -1) state.particles.splice(index, 1);
+
+    if ((particle as any)._weatherDestroyed) return;
+    if (markDisposed) (particle as any)._weatherDisposed = true;
+    particle.remove_all_transitions();
+    particle.destroy();
+  }
+
+  private updateParticleStyle(particle: St.Widget, type: EffectType): void {
+    if (!this.settings || (particle as any)._weatherDestroyed) return;
 
     const size = this.settings.get_int("particle-size");
     const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
     const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();
 
-      if (type === "snow") {
-        if (snowEmoji && snowEmoji !== "" && particle instanceof St.Label) {
-          particle.text = snowEmoji;
-          particle.style = `font-size: ${size}px; color: ${this.settings.get_string(
-            "snow-color",
-          )};`;
-        } else if (!(particle instanceof St.Label)) {
-          particle.style = `background-color: ${this.settings.get_string(
-            "snow-color",
-          )}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`;
-        }
-      } else {
-        if (rainEmoji && rainEmoji !== "" && particle instanceof St.Label) {
-          particle.text = rainEmoji;
-          particle.style = `font-size: ${size}px; color: ${this.settings.get_string(
-            "rain-color",
-          )};`;
-        } else if (!(particle instanceof St.Label)) {
-          particle.style = `background-color: ${this.settings.get_string(
-            "rain-color",
-          )}; width: ${size / 2}px; height: ${size * 2}px;`;
-        }
+    if (type === "snow") {
+      if (snowEmoji && particle instanceof St.Label) {
+        particle.text = snowEmoji;
+        particle.style = `font-size: ${size}px; color: ${this.settings.get_string(
+          "snow-color",
+        )};`;
+      } else if (!(particle instanceof St.Label)) {
+        particle.style = `background-color: ${this.settings.get_string(
+          "snow-color",
+        )}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`;
       }
+    } else if (rainEmoji && particle instanceof St.Label) {
+      particle.text = rainEmoji;
+      particle.style = `font-size: ${size}px; color: ${this.settings.get_string(
+        "rain-color",
+      )};`;
+    } else if (!(particle instanceof St.Label)) {
+      particle.style = `background-color: ${this.settings.get_string(
+        "rain-color",
+      )}; width: ${size / 2}px; height: ${size * 2}px;`;
+    }
   }
 
-  /**
-   * Get base animation duration for a given speed
-   */
-  getBaseDuration(speed: number): number {
+  private isCorrectType(particle: St.Widget, type: EffectType): boolean {
+    if (!this.settings || (particle as any)._weatherDestroyed) return false;
+
+    const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
+    const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();
+
+    if (type === "snow") {
+      return snowEmoji
+        ? particle instanceof St.Label && particle.text === snowEmoji
+        : particle instanceof St.Widget && !(particle instanceof St.Label);
+    }
+
+    return rainEmoji
+      ? particle instanceof St.Label && particle.text === rainEmoji
+      : particle instanceof St.Widget && !(particle instanceof St.Label);
+  }
+
+  private getBaseDuration(speed: number): number {
     switch (speed) {
       case 0:
         return 3500;
@@ -153,107 +426,5 @@ export class ParticleManager {
       default:
         return 500;
     }
-  }
-
-  /**
-   * Animate a single particle
-   */
-  animateSingleParticle(
-    particle: any,
-    monitorActor: MonitorActor,
-    screenHeight: number,
-    baseDuration: number,
-  ) {
-    if (!particle || !monitorActor || screenHeight <= 0 || baseDuration <= 0) {
-      return;
-    }
-
-    if (
-      (particle as any)._weatherDestroyed ||
-      !monitorActor.actor ||
-      (monitorActor.actor as any)._weatherDestroyed
-    ) {
-      return;
-    }
-
-    const particleRef = particle;
-    const monitorActorRef = monitorActor;
-    const randomOffset = Math.random() * 500;
-    const totalDuration = baseDuration + randomOffset;
-    const startY = particle.y;
-    const targetY = screenHeight + 20;
-    const totalDistance = targetY + 20;
-    const distanceToTravel = Math.max(1, targetY - startY);
-    const actualDuration = (distanceToTravel / totalDistance) * totalDuration;
-
-      particle.show();
-      particle.ease({
-        y: targetY,
-        duration: actualDuration,
-        mode: Clutter.AnimationMode.LINEAR,
-        onComplete: () => {
-          if (
-            !particleRef ||
-            (particleRef as any)._weatherDestroyed ||
-            !monitorActorRef ||
-            !monitorActorRef.actor ||
-            (monitorActorRef.actor as any)._weatherDestroyed
-          ) {
-            return;
-          }
-          if (!particleRef.get_parent()) {
-            return;
-          }
-          this.onAnimationFrame(
-            particleRef,
-            monitorActorRef,
-            screenHeight,
-            baseDuration,
-          );
-        },
-      });
-  }
-
-  /**
-   * Check if particle is of the correct type
-   */
-  isCorrectType(particle: any, type: EffectType): boolean {
-    if (!this.settings || !particle || (particle as any)._weatherDestroyed) {
-      return false;
-    }
-
-    const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
-    const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();
-
-      if (type === "snow") {
-        if (
-          snowEmoji &&
-          particle instanceof St.Label &&
-          particle.text === snowEmoji
-        ) {
-          return true;
-        } else if (
-          !snowEmoji &&
-          particle instanceof St.Widget &&
-          !(particle instanceof St.Label)
-        ) {
-          return true;
-        }
-      } else {
-        if (
-          rainEmoji &&
-          particle instanceof St.Label &&
-          particle.text === rainEmoji
-        ) {
-          return true;
-        } else if (
-          !rainEmoji &&
-          particle instanceof St.Widget &&
-          !(particle instanceof St.Label)
-        ) {
-          return true;
-        }
-      }
-    return false;
   }
 }
