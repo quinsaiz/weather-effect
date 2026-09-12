@@ -1,10 +1,11 @@
+import type Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
 import { WeatherIndicator } from "./UIManager.js";
 import { MonitorManager } from "./MonitorManager.js";
 import { ObscurationManager } from "./ObscurationManager.js";
-import { EffectType, ParticleManager } from "./ParticleManager.js";
+import { ParticleManager, type EffectType } from "./ParticleManager.js";
 
 type DisplayMode = "wallpaper" | "screen";
 
@@ -13,8 +14,8 @@ type DisplayMode = "wallpaper" | "screen";
  * Coordinates different managers and safely handles GNOME Shell lifecycle.
  */
 export class WeatherEffectController {
-  private _settings: any;
-  private _indicator: any = null;
+  private _settings: Gio.Settings | null;
+  private _indicator: InstanceType<typeof WeatherIndicator> | null = null;
   private _monitorManager: MonitorManager | null = null;
   private _obscurationManager: ObscurationManager | null = null;
   private _particleManager: ParticleManager | null = null;
@@ -27,7 +28,7 @@ export class WeatherEffectController {
   private _fullscreenRefreshPending: boolean = false;
   private _grabDragTimeout: number | null = null;
 
-  constructor(settings: any) {
+  constructor(settings: Gio.Settings) {
     this._settings = settings;
   }
 
@@ -70,12 +71,18 @@ export class WeatherEffectController {
     this._isEnabled = true;
 
     // Initialize managers
-    this._monitorManager = new MonitorManager(this._settings);
-    this._obscurationManager = new ObscurationManager(this._settings);
-    this._particleManager = new ParticleManager(this._settings);
+    this._monitorManager = new MonitorManager(this._settings as Gio.Settings);
+    this._obscurationManager = new ObscurationManager(
+      this._settings as Gio.Settings,
+    );
+    this._particleManager = new ParticleManager(
+      this._settings as Gio.Settings,
+    );
 
     // Create UI if configured
-    if (this._settings.get_boolean("show-in-quick-settings")) {
+    if (
+      (this._settings as Gio.Settings).get_boolean("show-in-quick-settings")
+    ) {
       this._createIndicator();
     }
 
@@ -109,8 +116,12 @@ export class WeatherEffectController {
   private _createIndicator() {
     if (this._indicator || !this._settings) return;
 
-    this._indicator = new WeatherIndicator(this._settings);
-    Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
+    this._indicator = new (WeatherIndicator as typeof WeatherIndicator & {
+      new (settings: Gio.Settings): InstanceType<typeof WeatherIndicator>;
+    })(this._settings);
+    Main.panel.statusArea.quickSettings.addExternalIndicator(
+      this._indicator as any,
+    );
   }
 
   /**
@@ -239,7 +250,9 @@ export class WeatherEffectController {
       "active-workspace-changed",
       () => {
         if (!this._isEnabled) return;
-        const mode: DisplayMode = this._settings.get_string("display-mode");
+        const mode = (this._settings as Gio.Settings).get_string(
+          "display-mode",
+        ) as DisplayMode;
         if (mode === "wallpaper") {
           this._particleManager?.clearAll();
         }
@@ -503,7 +516,7 @@ export class WeatherEffectController {
         overviewVisible,
       );
 
-    const type: EffectType = this._settings.get_string("effect-type");
+    const type = this._settings.get_string("effect-type") as EffectType;
     const count = this._settings.get_int("particle-count");
     const speed = this._settings.get_int("speed");
     const targets = runnableMonitorActors.map((monitorActor) => ({

@@ -1,6 +1,7 @@
+import type Gio from "gi://Gio";
 import Meta from "gi://Meta";
 
-import { MonitorActor } from "./MonitorManager.js";
+import type { MonitorActor, ShellMonitor } from "./MonitorManager.js";
 
 type DisplayMode = "wallpaper" | "screen";
 
@@ -10,16 +11,16 @@ type DisplayMode = "wallpaper" | "screen";
 export class ObscurationManager {
   private monitorObscuredCache: Map<number, boolean> = new Map();
   private fullscreenCoveredMonitorIndexes: Set<number> = new Set();
-  private settings: any;
+  private settings: Gio.Settings;
 
-  constructor(settings: any) {
+  constructor(settings: Gio.Settings) {
     this.settings = settings;
   }
 
   /**
    * Is monitor obscured by a window
    */
-  isMonitorObscured(monitor: any): boolean {
+  isMonitorObscured(monitor: ShellMonitor): boolean {
     if (!monitor || typeof monitor.index !== "number") {
       return false;
     }
@@ -42,8 +43,8 @@ export class ObscurationManager {
     }
 
     const windows = windowActors
-      .map((actor: any) => {
-        return actor?.meta_window as Meta.Window | null;
+      .map((actor) => {
+        return actor?.meta_window;
       })
       .filter((w): w is Meta.Window => {
         if (!w) return false;
@@ -102,9 +103,9 @@ export class ObscurationManager {
     const currentMonitorActors = monitorActors.filter(
       (monitorActor) =>
         !!monitorActor?.actor &&
-        !(monitorActor.actor as any)._weatherDestroyed,
+        !monitorActor.actor._weatherDestroyed,
     );
-    const mode: DisplayMode = this.settings.get_string("display-mode");
+    const mode = this.settings.get_string("display-mode") as DisplayMode;
 
     if (mode === "screen") {
       if (!this.settings.get_boolean("pause-on-fullscreen")) {
@@ -139,7 +140,7 @@ export class ObscurationManager {
 
       if (windowActors) {
         for (const actor of windowActors) {
-          const window = actor?.meta_window as Meta.Window | null;
+          const window = actor?.meta_window;
           if (
             window &&
             !window.minimized &&
@@ -170,7 +171,7 @@ export class ObscurationManager {
   recomputeObscuration(monitorActors: MonitorActor[]) {
     if (!this.settings || !monitorActors) return;
 
-    const mode: DisplayMode = this.settings.get_string("display-mode");
+    const mode = this.settings.get_string("display-mode") as DisplayMode;
 
     if (mode === "screen") {
       this.monitorObscuredCache.clear();

@@ -1,4 +1,5 @@
 import Adw from "gi://Adw";
+import type Gio from "gi://Gio";
 import Gtk from "gi://Gtk";
 import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 
@@ -49,7 +50,7 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
         "Display the toggle button and icon in the Quick Settings panel",
       active: settings.get_boolean("show-in-quick-settings"),
     });
-    quickSettingsRow.connect("notify::active", (row: any) => {
+    quickSettingsRow.connect("notify::active", (row: Adw.SwitchRow) => {
       settings.set_boolean("show-in-quick-settings", row.active);
     });
     generalGroup.add(quickSettingsRow);
@@ -60,7 +61,7 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
         "When ON and in Screen mode, pause animation on fullscreen windows",
       active: settings.get_boolean("pause-on-fullscreen"),
     });
-    pauseRow.connect("notify::active", (row: any) => {
+    pauseRow.connect("notify::active", (row: Adw.SwitchRow) => {
       settings.set_boolean("pause-on-fullscreen", row.active);
     });
     generalGroup.add(pauseRow);
@@ -186,8 +187,8 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
     key,
     range,
   }: {
-    settings: any;
-    row: any;
+    settings: Gio.Settings;
+    row: Adw.SpinRow;
     key: string;
     range: [number, number, number];
   }) {
@@ -197,7 +198,7 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
       step_increment: range[2],
     });
     row.value = settings.get_int(key);
-    row.connect("notify::value", (spin: any) => {
+    row.connect("notify::value", (spin: Adw.SpinRow) => {
       const newValue = spin.get_value();
       settings.set_int(key, newValue);
     });

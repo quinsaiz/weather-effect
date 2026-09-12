@@ -14,12 +14,13 @@ type EffectType = "snow" | "rain";
  */
 export const WeatherToggle = GObject.registerClass(
   class WeatherToggle extends QuickMenuToggle {
-    private _settings: any;
+    declare public _weatherDestroyed: boolean;
+    private _settings: Gio.Settings | null;
     private _snowButton: St.Button | null = null;
     private _rainButton: St.Button | null = null;
     private _buttonBox: St.BoxLayout | null = null;
 
-    constructor(settings: any) {
+    constructor(settings: Gio.Settings) {
       super({
         title: "Weather Effect",
         iconName: "weather-snow-symbolic",
@@ -27,7 +28,7 @@ export const WeatherToggle = GObject.registerClass(
       });
 
       this._weatherDestroyed = false;
-      this.connect("destroy", (actor: any) => {
+      this.connect("destroy", (actor) => {
         actor._weatherDestroyed = true;
       });
 
@@ -40,7 +41,7 @@ export const WeatherToggle = GObject.registerClass(
         Gio.SettingsBindFlags.DEFAULT,
       );
       this.connect("notify::checked", () => this._updateButtons());
-      const effectType: EffectType = this._settings.get_string("effect-type");
+      const effectType = this._settings.get_string("effect-type") as EffectType;
       this.iconName =
         effectType === "snow"
           ? "weather-snow-symbolic"
@@ -74,8 +75,8 @@ export const WeatherToggle = GObject.registerClass(
       this._buttonBox.add_child(snowBox);
 
       this._snowButton.connectObject("clicked", () => {
-        this._settings.set_string("effect-type", "snow");
-        this._settings.set_boolean("active", true);
+        (this._settings as Gio.Settings).set_string("effect-type", "snow");
+        (this._settings as Gio.Settings).set_boolean("active", true);
         this._updateButtons();
         this.iconName = "weather-snow-symbolic";
       }, this);
@@ -102,8 +103,8 @@ export const WeatherToggle = GObject.registerClass(
       this._buttonBox.add_child(rainBox);
 
       this._rainButton.connectObject("clicked", () => {
-        this._settings.set_string("effect-type", "rain");
-        this._settings.set_boolean("active", true);
+        (this._settings as Gio.Settings).set_string("effect-type", "rain");
+        (this._settings as Gio.Settings).set_boolean("active", true);
         this._updateButtons();
         this.iconName = "weather-showers-symbolic";
       }, this);
@@ -115,7 +116,9 @@ export const WeatherToggle = GObject.registerClass(
         () => {
           this._updateButtons();
           const effectType: EffectType =
-            this._settings.get_string("effect-type");
+            (this._settings as Gio.Settings).get_string(
+              "effect-type",
+            ) as EffectType;
           this.iconName =
             effectType === "snow"
               ? "weather-snow-symbolic"
@@ -129,7 +132,9 @@ export const WeatherToggle = GObject.registerClass(
 
     _updateButtons() {
       if (!this._settings || !this._snowButton || !this._rainButton) return;
-      const effectType: EffectType = this._settings.get_string("effect-type");
+      const effectType = this._settings.get_string(
+        "effect-type",
+      ) as EffectType;
       const isActive = this._settings.get_boolean("active");
 
       if (effectType === "snow" && isActive) {
@@ -164,18 +169,20 @@ export const WeatherToggle = GObject.registerClass(
  */
 export const WeatherIndicator = GObject.registerClass(
   class WeatherIndicator extends SystemIndicator {
-    public toggle: InstanceType<typeof WeatherToggle>;
-    private _indicator: any;
-    private _settings: any;
+    public toggle!: InstanceType<typeof WeatherToggle> | null;
+    private _indicator: St.Icon | null;
+    private _settings: Gio.Settings | null;
 
-    constructor(settings: any) {
+    constructor(settings: Gio.Settings) {
       super();
 
-      this._indicator = (this as any)._addIndicator();
+      this._indicator = this._addIndicator();
       this._indicator.icon_name = "weather-snow-symbolic";
       this._settings = settings;
 
-      this.toggle = new WeatherToggle(settings);
+      this.toggle = new (WeatherToggle as typeof WeatherToggle & {
+        new (settings: Gio.Settings): InstanceType<typeof WeatherToggle>;
+      })(settings);
       this.quickSettingsItems.push(this.toggle);
 
       this._updateIndicatorIcon();
@@ -195,10 +202,10 @@ export const WeatherIndicator = GObject.registerClass(
         !this._settings ||
         !this.toggle ||
         !this._indicator ||
-        (this.toggle as any)._weatherDestroyed
+        this.toggle._weatherDestroyed
       )
         return;
-      const effectType: EffectType = this._settings.get_string("effect-type");
+      const effectType = this._settings.get_string("effect-type") as EffectType;
       let checked = false;
       if (this.toggle.checked !== undefined) {
         checked = this.toggle.checked;
@@ -216,7 +223,7 @@ export const WeatherIndicator = GObject.registerClass(
 
       if (this.toggle) {
         this.toggle.destroy();
-        this.toggle = null as any;
+        this.toggle = null;
       }
 
       this.quickSettingsItems.length = 0;

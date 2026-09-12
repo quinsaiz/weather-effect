@@ -1,9 +1,15 @@
 import Clutter from "gi://Clutter";
+import type Gio from "gi://Gio";
 import St from "gi://St";
 
-import { MonitorActor } from "./MonitorManager.js";
+import type { MonitorActor } from "./MonitorManager.js";
 
 export type EffectType = "snow" | "rain";
+
+type ParticleActor = St.Widget & {
+  _weatherDestroyed?: boolean;
+  _weatherDisposed?: boolean;
+};
 
 export interface ParticleTarget {
   monitorActor: MonitorActor;
@@ -13,7 +19,7 @@ export interface ParticleTarget {
 }
 
 interface MonitorParticleState {
-  particles: St.Widget[];
+  particles: ParticleActor[];
   target: ParticleTarget | null;
   monitorDestroyId: number | null;
 }
@@ -22,10 +28,10 @@ interface MonitorParticleState {
  * Owns particle creation, animation, reconciliation, and retirement.
  */
 export class ParticleManager {
-  private settings: any;
+  private settings: Gio.Settings | null;
   private monitorStates: Map<MonitorActor, MonitorParticleState> = new Map();
 
-  constructor(settings: any) {
+  constructor(settings: Gio.Settings) {
     this.settings = settings;
   }
 
@@ -38,8 +44,7 @@ export class ParticleManager {
     const liveMonitorSet = new Set(
       liveMonitorActors.filter(
         (monitorActor) =>
-          !!monitorActor.actor &&
-          !(monitorActor.actor as any)._weatherDestroyed,
+          !!monitorActor.actor && !monitorActor.actor._weatherDestroyed,
       ),
     );
 
@@ -95,7 +100,7 @@ export class ParticleManager {
       if (
         state.monitorDestroyId !== null &&
         actor &&
-        !(actor as any)._weatherDestroyed
+        !actor._weatherDestroyed
       ) {
         actor.disconnect(state.monitorDestroyId);
       }
@@ -114,7 +119,7 @@ export class ParticleManager {
     if (existingState) return existingState;
 
     const actor = monitorActor.actor;
-    if (!actor || (actor as any)._weatherDestroyed) return null;
+    if (!actor || actor._weatherDestroyed) return null;
 
     const state: MonitorParticleState = {
       particles: [],
@@ -139,7 +144,7 @@ export class ParticleManager {
     state.target = null;
     const actor = monitorActor.actor;
 
-    if (actor && !(actor as any)._weatherDestroyed) {
+    if (actor && !actor._weatherDestroyed) {
       this.clearMonitorState(state);
       if (state.monitorDestroyId !== null) {
         actor.disconnect(state.monitorDestroyId);
@@ -158,7 +163,7 @@ export class ParticleManager {
     target: ParticleTarget,
   ): void {
     const actor = monitorActor.actor;
-    if (!actor || (actor as any)._weatherDestroyed) return;
+    if (!actor || actor._weatherDestroyed) return;
 
     while (state.particles.length > target.count) {
       const particle = state.particles.pop();
@@ -179,8 +184,7 @@ export class ParticleManager {
 
       if (
         !particle ||
-        (particle as any)._weatherDestroyed ||
-        (particle as any)._weatherDisposed
+        particle._weatherDestroyed || particle._weatherDisposed
       ) {
         state.particles.splice(index, 1);
         continue;
@@ -213,9 +217,9 @@ export class ParticleManager {
     monitorActor: MonitorActor,
     state: MonitorParticleState,
     type: EffectType,
-  ): St.Widget | null {
+  ): ParticleActor | null {
     const actor = monitorActor.actor;
-    if (!this.settings || !actor || (actor as any)._weatherDestroyed) {
+    if (!this.settings || !actor || actor._weatherDestroyed) {
       return null;
     }
 
@@ -224,7 +228,7 @@ export class ParticleManager {
     const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();
     const x = Math.random() * Math.max(1, monitorActor.monitor.width);
 
-    let particle: St.Widget;
+    let particle: ParticleActor;
     if (type === "snow") {
       if (snowEmoji) {
         particle = new St.Label({
@@ -234,7 +238,7 @@ export class ParticleManager {
           )};`,
           x,
           y: -20,
-        });
+        }) as ParticleActor;
       } else {
         particle = new St.Widget({
           style: `background-color: ${this.settings.get_string(
@@ -242,7 +246,7 @@ export class ParticleManager {
           )}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`,
           x,
           y: -20,
-        });
+        }) as ParticleActor;
       }
     } else if (rainEmoji) {
       particle = new St.Label({
@@ -252,7 +256,7 @@ export class ParticleManager {
         )};`,
         x,
         y: -20,
-      });
+      }) as ParticleActor;
     } else {
       particle = new St.Widget({
         style: `background-color: ${this.settings.get_string(
@@ -260,11 +264,11 @@ export class ParticleManager {
         )}; width: ${size / 2}px; height: ${size * 2}px;`,
         x,
         y: -20,
-      });
+      }) as ParticleActor;
     }
 
-    (particle as any)._weatherDestroyed = false;
-    particle.connect("destroy", (destroyedParticle: any) => {
+    particle._weatherDestroyed = false;
+    particle.connect("destroy", (destroyedParticle) => {
       destroyedParticle._weatherDestroyed = true;
       const index = state.particles.indexOf(destroyedParticle);
       if (index !== -1) state.particles.splice(index, 1);
@@ -276,15 +280,15 @@ export class ParticleManager {
   private animateParticle(
     monitorActor: MonitorActor,
     state: MonitorParticleState,
-    particle: St.Widget,
+    particle: ParticleActor,
     speed: number,
   ): void {
     const actor = monitorActor.actor;
     if (
-      (particle as any)._weatherDestroyed ||
-      (particle as any)._weatherDisposed ||
+      particle._weatherDestroyed ||
+      particle._weatherDisposed ||
       !actor ||
-      (actor as any)._weatherDestroyed
+      actor._weatherDestroyed
     ) {
       return;
     }
@@ -312,17 +316,16 @@ export class ParticleManager {
   private handleTransitionComplete(
     monitorActor: MonitorActor,
     state: MonitorParticleState,
-    particle: St.Widget,
+    particle: ParticleActor,
   ): void {
     if (
-      (particle as any)._weatherDestroyed ||
-      (particle as any)._weatherDisposed
+      particle._weatherDestroyed || particle._weatherDisposed
     ) {
       return;
     }
 
     const actor = monitorActor.actor;
-    if (!actor || (actor as any)._weatherDestroyed) return;
+    if (!actor || actor._weatherDestroyed) return;
     if (
       !this.settings ||
       this.monitorStates.get(monitorActor) !== state ||
@@ -335,7 +338,7 @@ export class ParticleManager {
     particle.y = -20;
     particle.x = Math.random() * Math.max(1, monitorActor.monitor.width);
 
-    const type: EffectType = this.settings.get_string("effect-type");
+    const type = this.settings.get_string("effect-type") as EffectType;
     const speed = this.settings.get_int("speed");
     this.updateParticleStyle(particle, type);
 
@@ -356,20 +359,20 @@ export class ParticleManager {
 
   private retireParticle(
     state: MonitorParticleState,
-    particle: St.Widget,
+    particle: ParticleActor,
     markDisposed: boolean,
   ): void {
     const index = state.particles.indexOf(particle);
     if (index !== -1) state.particles.splice(index, 1);
 
-    if ((particle as any)._weatherDestroyed) return;
-    if (markDisposed) (particle as any)._weatherDisposed = true;
+    if (particle._weatherDestroyed) return;
+    if (markDisposed) particle._weatherDisposed = true;
     particle.remove_all_transitions();
     particle.destroy();
   }
 
-  private updateParticleStyle(particle: St.Widget, type: EffectType): void {
-    if (!this.settings || (particle as any)._weatherDestroyed) return;
+  private updateParticleStyle(particle: ParticleActor, type: EffectType): void {
+    if (!this.settings || particle._weatherDestroyed) return;
 
     const size = this.settings.get_int("particle-size");
     const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
@@ -398,8 +401,8 @@ export class ParticleManager {
     }
   }
 
-  private isCorrectType(particle: St.Widget, type: EffectType): boolean {
-    if (!this.settings || (particle as any)._weatherDestroyed) return false;
+  private isCorrectType(particle: ParticleActor, type: EffectType): boolean {
+    if (!this.settings || particle._weatherDestroyed) return false;
 
     const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
     const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();

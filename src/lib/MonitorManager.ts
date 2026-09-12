@@ -1,10 +1,15 @@
 import Clutter from "gi://Clutter";
+import type Gio from "gi://Gio";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
+export type ShellMonitor = (typeof Main.layoutManager.monitors)[number];
+export type MonitorLayerActor = Clutter.Actor & {
+  _weatherDestroyed: boolean;
+};
 
 export interface MonitorActor {
-  actor: Clutter.Actor | null;
-  monitor: any;
+  actor: MonitorLayerActor | null;
+  monitor: ShellMonitor;
 }
 
 /**
@@ -12,7 +17,7 @@ export interface MonitorActor {
  */
 export class MonitorManager {
   private monitorActors: MonitorActor[] = [];
-  private settings: any;
+  private settings: Gio.Settings | null;
   private uiGroup: Clutter.Actor | null = null;
   private uiGroupDestroyId: number | null = null;
   private backgroundGroup: Clutter.Actor | null = null;
@@ -20,7 +25,7 @@ export class MonitorManager {
   private wallpaperUsesUiGroup = false;
   private shellContainersAvailable = true;
 
-  constructor(settings: any) {
+  constructor(settings: Gio.Settings) {
     this.settings = settings;
 
     this.uiGroup = Main.layoutManager.uiGroup;
@@ -35,8 +40,12 @@ export class MonitorManager {
     }
 
     this.backgroundGroup =
-      (Main.layoutManager as any).backgroundGroup ??
-      (Main.layoutManager as any)._backgroundGroup ??
+      (
+        Main.layoutManager as typeof Main.layoutManager & {
+          backgroundGroup?: Clutter.Actor;
+        }
+      ).backgroundGroup ??
+      Main.layoutManager._backgroundGroup ??
       null;
     this.wallpaperUsesUiGroup = !this.backgroundGroup;
 
@@ -100,8 +109,7 @@ export class MonitorManager {
 
     for (const monitorActor of this.monitorActors) {
       if (
-        !monitorActor.actor ||
-        (monitorActor.actor as any)._weatherDestroyed
+        !monitorActor.actor || monitorActor.actor._weatherDestroyed
       )
         continue;
 
@@ -128,16 +136,14 @@ export class MonitorManager {
       const monitorActor = this.monitorActors[i];
 
       if (
-        !monitorActor?.actor ||
-        (monitorActor.actor as any)._weatherDestroyed
+        !monitorActor?.actor || monitorActor.actor._weatherDestroyed
       ) {
         this.monitorActors.splice(i, 1);
         continue;
       }
 
       const exists = monitors.find(
-        (m: any) =>
-          m.x === monitorActor.monitor.x && m.y === monitorActor.monitor.y,
+        (m) => m.x === monitorActor.monitor.x && m.y === monitorActor.monitor.y,
       );
 
       if (!exists) {
@@ -183,8 +189,7 @@ export class MonitorManager {
     for (const monitorActor of monitorActors) {
       if (monitorActor) {
         if (
-          monitorActor.actor &&
-          !(monitorActor.actor as any)._weatherDestroyed
+          monitorActor.actor && !monitorActor.actor._weatherDestroyed
         ) {
           monitorActor.actor.destroy();
           monitorActor.actor = null;
@@ -193,18 +198,18 @@ export class MonitorManager {
     }
   }
 
-  private createMonitorActor(monitor: any): MonitorActor {
+  private createMonitorActor(monitor: ShellMonitor): MonitorActor {
     const actor = new Clutter.Actor({
       width: monitor.width,
       height: monitor.height,
       reactive: false,
       x: monitor.x,
       y: monitor.y,
-    });
+    }) as MonitorLayerActor;
     const monitorActor: MonitorActor = { actor, monitor };
 
-    (actor as any)._weatherDestroyed = false;
-    actor.connect("destroy", (destroyedActor: any) => {
+    actor._weatherDestroyed = false;
+    actor.connect("destroy", (destroyedActor) => {
       destroyedActor._weatherDestroyed = true;
       monitorActor.actor = null;
 
