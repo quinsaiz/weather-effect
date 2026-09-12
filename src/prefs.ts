@@ -75,8 +75,8 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
     particlesPage.add(particlesGroup);
 
     const particleCountRow = new Adw.SpinRow({
-      title: "Particle Count",
-      subtitle: "Number of falling particles (5-50)",
+      title: "Particles per monitor",
+      subtitle: "Number of particles shown on each monitor",
     });
     this._bindNumberRow({
       settings,

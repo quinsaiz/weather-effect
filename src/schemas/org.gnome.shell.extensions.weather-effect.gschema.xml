@@ -37,8 +37,8 @@
     <key name="particle-count" type="i">
       <default>10</default>
       <range min="5" max="50"/>
-      <summary>Particle count</summary>
-      <description>Number of falling particles (5 to 50).</description>
+      <summary>Particles per monitor</summary>
+      <description>Number of particles shown on each monitor.</description>
     </key>
     <key name="particle-size" type="i">
       <default>4</default>

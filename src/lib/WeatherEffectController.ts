@@ -24,8 +24,8 @@ export class WeatherEffectController {
   // Centralized timeout tracking to prevent memory leaks
   private _timeouts: Set<number> = new Set();
   private timeoutId: number | null = null;
-  private _displayModeTimeout: number | null = null;
   private _debounceTimeout: number | null = null;
+  private _fullscreenRefreshPending: boolean = false;
   private _grabDragTimeout: number | null = null;
 
   constructor(settings: any) {
@@ -92,7 +92,7 @@ export class WeatherEffectController {
     // Set up event handlers using connectObject
     this._setupEventHandlers();
 
-    this._syncActiveState();
+    this._refreshFullscreenStateAndReconcile();
   }
 
   /**
@@ -151,8 +151,7 @@ export class WeatherEffectController {
       "showing",
       () => {
         if (!this._isEnabled) return;
-        const mode: DisplayMode = this._settings.get_string("display-mode");
-        if (mode === "wallpaper") this._stopAnimation();
+        this._reconcileAnimation(true);
       },
       this,
     );
@@ -162,7 +161,7 @@ export class WeatherEffectController {
       () => {
         if (!this._isEnabled) return;
         this._recomputeObscuration();
-        this._syncActiveState();
+        this._reconcileAnimation();
       },
       this,
     );
@@ -173,7 +172,7 @@ export class WeatherEffectController {
         "changed::active",
         () => {
           if (!this._isEnabled) return;
-          this._syncActiveState();
+          this._refreshFullscreenStateAndReconcile();
         },
         this,
       );
@@ -192,28 +191,10 @@ export class WeatherEffectController {
         () => {
           if (!this._isEnabled || !this._monitorManager) return;
 
-          const wasRunning = !!this.timeoutId;
           this._stopAnimation();
           this._monitorManager?.attachMonitorActors();
-
-          if (wasRunning) {
-            this._displayModeTimeout = this._removeTimeout(this._displayModeTimeout);
-            this._displayModeTimeout = this._addTimeout(
-              GLib.PRIORITY_DEFAULT,
-              100,
-              () => {
-                if (!this._isEnabled) {
-                  this._displayModeTimeout = null;
-                  return GLib.SOURCE_REMOVE;
-                }
-                this._syncActiveState();
-                this._displayModeTimeout = null;
-                return GLib.SOURCE_REMOVE;
-              },
-            );
-          } else {
-            this._syncActiveState();
-          }
+          this._recomputeObscuration();
+          this._refreshFullscreenStateAndReconcile();
         },
         this,
       );
@@ -223,7 +204,7 @@ export class WeatherEffectController {
         () => {
           if (!this._isEnabled || !this._monitorManager || !this._obscurationManager) return;
           this._recomputeObscuration();
-          this._syncActiveState();
+          this._refreshFullscreenStateAndReconcile();
         },
         this,
       );
@@ -237,7 +218,7 @@ export class WeatherEffectController {
         this._monitorManager?.destroy();
         this._monitorManager?.createMonitorActors();
         this._recomputeObscuration();
-        this._syncActiveState();
+        this._refreshFullscreenStateAndReconcile();
       },
       this,
     );
@@ -248,7 +229,7 @@ export class WeatherEffectController {
         if (!this._isEnabled) return;
         this._monitorManager?.updateMonitorActors();
         this._recomputeObscuration();
-        this._syncActiveState();
+        this._refreshFullscreenStateAndReconcile();
       },
       this,
     );
@@ -261,10 +242,12 @@ export class WeatherEffectController {
         const mode: DisplayMode = this._settings.get_string("display-mode");
         if (mode === "wallpaper") {
           this._monitorManager?.getMonitorActors().forEach((ma) => {
-            this._monitorManager?.clearParticles(ma);
+            if (ma.particles.length > 0) {
+              this._monitorManager?.clearParticles(ma);
+            }
           });
         }
-        this._debouncedRecompute();
+        this._debouncedRecompute(true);
       },
       this,
     );
@@ -274,7 +257,7 @@ export class WeatherEffectController {
       "window-created",
       () => {
         if (!this._isEnabled) return;
-        this._debouncedRecompute();
+        this._debouncedRecompute(true);
       },
       this,
     );
@@ -292,7 +275,7 @@ export class WeatherEffectController {
       "minimize",
       () => {
         if (!this._isEnabled) return;
-        this._debouncedRecompute();
+        this._debouncedRecompute(true);
       },
       this,
     );
@@ -301,7 +284,16 @@ export class WeatherEffectController {
       "unminimize",
       () => {
         if (!this._isEnabled) return;
-        this._debouncedRecompute();
+        this._debouncedRecompute(true);
+      },
+      this,
+    );
+
+    global.window_manager.connectObject(
+      "destroy",
+      () => {
+        if (!this._isEnabled) return;
+        this._debouncedRecompute(true);
       },
       this,
     );
@@ -319,7 +311,25 @@ export class WeatherEffectController {
       "in-fullscreen-changed",
       () => {
         if (!this._isEnabled) return;
-        this._debouncedRecompute();
+        this._debouncedRecompute(true);
+      },
+      this,
+    );
+
+    global.display.connectObject(
+      "window-entered-monitor",
+      () => {
+        if (!this._isEnabled) return;
+        this._debouncedRecompute(true);
+      },
+      this,
+    );
+
+    global.display.connectObject(
+      "window-left-monitor",
+      () => {
+        if (!this._isEnabled) return;
+        this._debouncedRecompute(true);
       },
       this,
     );
@@ -339,7 +349,7 @@ export class WeatherEffectController {
               return GLib.SOURCE_REMOVE;
             }
             this._recomputeObscuration();
-            this._syncActiveState();
+            this._reconcileAnimation();
             return GLib.SOURCE_CONTINUE;
           },
         );
@@ -366,8 +376,8 @@ export class WeatherEffectController {
     this._timeouts.clear();
 
     this.timeoutId = null;
-    this._displayModeTimeout = null;
     this._debounceTimeout = null;
+    this._fullscreenRefreshPending = false;
     this._grabDragTimeout = null;
   }
 
@@ -409,48 +419,84 @@ export class WeatherEffectController {
   /**
    * Debounced recompute of obscuration.
    */
-  private _debouncedRecompute() {
+  private _debouncedRecompute(refreshFullscreenState = false) {
+    this._fullscreenRefreshPending ||= refreshFullscreenState;
     this._debounceTimeout = this._removeTimeout(this._debounceTimeout);
     this._debounceTimeout = this._addTimeout(GLib.PRIORITY_DEFAULT, 100, () => {
       if (!this._isEnabled) {
         this._debounceTimeout = null;
+        this._fullscreenRefreshPending = false;
         return GLib.SOURCE_REMOVE;
       }
       this._recomputeObscuration();
-      this._syncActiveState();
+      if (this._fullscreenRefreshPending) {
+        this._fullscreenRefreshPending = false;
+        this._refreshFullscreenStateAndReconcile();
+      } else {
+        this._reconcileAnimation();
+      }
       this._debounceTimeout = null;
       return GLib.SOURCE_REMOVE;
     });
   }
 
+  private _refreshFullscreenStateAndReconcile() {
+    if (!this._isEnabled || !this._obscurationManager) return;
+
+    this._fullscreenRefreshPending = false;
+    this._obscurationManager.refreshFullscreenState();
+    this._reconcileAnimation();
+  }
+
   /**
-   * Reconcile the animation with the canonical active setting.
+   * Reconcile particles and the management source with current monitor state.
    */
-  private _syncActiveState() {
-    if (!this._isEnabled || !this._monitorManager || !this._settings) return;
+  private _reconcileAnimation(isOverviewVisible = Main.overview.visible) {
+    const canRender = this._maintainParticles(isOverviewVisible);
 
-    const active = this._settings.get_boolean("active");
-    const mode: DisplayMode = this._settings.get_string("display-mode");
-    let shouldRun = false;
+    if (canRender) {
+      this._startAnimation();
+    } else {
+      this.timeoutId = this._removeTimeout(this.timeoutId);
+    }
+  }
 
-    if (active) {
-      if (mode === "screen") {
-        shouldRun = true;
-      } else if (!Main.overview.visible) {
-        const anyActive = this._monitorManager
-          .getMonitorActors()
-          .some((ma) => this._canRunOnMonitor(ma));
-        shouldRun = anyActive;
+  private _maintainParticles(
+    isOverviewVisible = Main.overview.visible,
+  ): boolean {
+    if (
+      !this._isEnabled ||
+      !this._monitorManager ||
+      !this._obscurationManager ||
+      !this._particleManager ||
+      !this._settings
+    ) {
+      return false;
+    }
+
+    const monitorActors = this._monitorManager.getMonitorActors();
+    const runnableMonitorActors =
+      this._obscurationManager.getRunnableMonitorActors(
+        monitorActors,
+        isOverviewVisible,
+      );
+    const runnableMonitorSet = new Set(runnableMonitorActors);
+
+    for (const monitorActor of monitorActors) {
+      if (
+        !runnableMonitorSet.has(monitorActor) &&
+        monitorActor.particles.length > 0
+      ) {
+        this._monitorManager.clearParticles(monitorActor);
       }
     }
 
-    const isRunning = !!this.timeoutId;
-
-    if (shouldRun && !isRunning) {
-      this._startAnimation();
-    } else if (!shouldRun && isRunning) {
-      this._stopAnimation();
+    if (runnableMonitorActors.length === 0) {
+      return false;
     }
+
+    this._manageParticles(runnableMonitorActors);
+    return true;
   }
 
   /**
@@ -459,15 +505,15 @@ export class WeatherEffectController {
   private _startAnimation() {
     if (this.timeoutId || !this._isEnabled || !this._settings) return;
 
-    const mode: DisplayMode = this._settings.get_string("display-mode");
-    if (mode === "wallpaper" && Main.overview.visible) return;
-
     this.timeoutId = this._addTimeout(GLib.PRIORITY_DEFAULT, 50, () => {
       if (!this._isEnabled) {
         this.timeoutId = null;
         return GLib.SOURCE_REMOVE;
       }
-      this._animateParticles();
+      if (!this._maintainParticles()) {
+        this.timeoutId = null;
+        return GLib.SOURCE_REMOVE;
+      }
       return GLib.SOURCE_CONTINUE;
     });
   }
@@ -482,7 +528,13 @@ export class WeatherEffectController {
     const monitorActors = this._monitorManager.getMonitorActors();
 
     for (const ma of monitorActors) {
-      if (!ma?.actor || (ma.actor as any)._isDestroyedByGnome) continue;
+      if (
+        !ma?.actor ||
+        (ma.actor as any)._isDestroyedByGnome ||
+        ma.particles.length === 0
+      ) {
+        continue;
+      }
 
       for (const particle of ma.particles) {
         if (particle && !(particle as any)._isDestroyedByGnome) {
@@ -505,43 +557,20 @@ export class WeatherEffectController {
   }
 
   /**
-   * Check if animation can run on a specific monitor.
+   * Animate and manage particles on runnable monitors.
    */
-  private _canRunOnMonitor(monitorActor: MonitorActor): boolean {
-    if (!this._isEnabled || !this._obscurationManager) return false;
-
-    return this._obscurationManager.canRunOnMonitor(
-      monitorActor,
-      Main.overview.visible,
-    );
-  }
-
-  /**
-   * Animate and manage particle counts across monitors.
-   */
-  private _animateParticles() {
+  private _manageParticles(monitorActors: MonitorActor[]) {
     if (!this._isEnabled || !this._monitorManager || !this._particleManager || !this._settings) {
       return;
     }
 
     const type: EffectType = this._settings.get_string("effect-type");
-    const totalParticleCount = this._settings.get_int("particle-count");
+    const targetParticleCount = this._settings.get_int("particle-count");
     const speed = this._settings.get_int("speed");
     const baseDuration = this._particleManager.getBaseDuration(speed);
 
-    const monitorActors = this._monitorManager.getMonitorActors();
-    const particleCountPerMonitor = Math.max(
-      1,
-      Math.floor(totalParticleCount / monitorActors.length),
-    );
-
     for (const monitorActor of monitorActors) {
       if (!monitorActor?.actor || (monitorActor.actor as any)._isDestroyedByGnome) {
-        continue;
-      }
-
-      if (!this._canRunOnMonitor(monitorActor)) {
-        this._monitorManager.clearParticles(monitorActor);
         continue;
       }
 
@@ -549,7 +578,7 @@ export class WeatherEffectController {
       const screenHeight = Math.max(1, monitorActor.monitor.height);
 
       // Remove excess particles
-      while (monitorActor.particles.length > particleCountPerMonitor) {
+      while (monitorActor.particles.length > targetParticleCount) {
         const particle = monitorActor.particles.pop();
         if (particle && !(particle as any)._isDestroyedByGnome) {
           particle.remove_all_transitions();
@@ -558,8 +587,8 @@ export class WeatherEffectController {
       }
 
       // Add missing particles
-      if (monitorActor.particles.length < particleCountPerMonitor) {
-        const toAdd = particleCountPerMonitor - monitorActor.particles.length;
+      if (monitorActor.particles.length < targetParticleCount) {
+        const toAdd = targetParticleCount - monitorActor.particles.length;
 
         for (let i = 0; i < toAdd; i++) {
           if (!this._isEnabled) break;
@@ -661,13 +690,12 @@ export class WeatherEffectController {
     const updatedType: EffectType = this._settings.get_string("effect-type");
     const updatedSpeed = this._settings.get_int("speed");
     const updatedBaseDuration = this._particleManager!.getBaseDuration(updatedSpeed);
-    const mode: DisplayMode = this._settings.get_string("display-mode");
 
     this._particleManager!.updateParticleStyle(particle, updatedType);
 
     const canRun =
       this._settings.get_boolean("active") &&
-      (mode === "screen" || this._canRunOnMonitor(monitorActor));
+      this.timeoutId !== null;
 
     if (canRun) {
       this._particleManager!.animateSingleParticle(

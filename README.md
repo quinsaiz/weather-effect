@@ -38,7 +38,7 @@ Enjoy the magic of falling snowflakes or raindrops on your GNOME desktop!
   - **Wallpaper Mode**: Effects only on desktop wallpaper background
   - **Screen Mode**: Full-screen overlay that works even in overview
 - **Customizable Settings**:
-  - Particle count (5–50)
+  - Particles per monitor: 5–50
   - Particle size (4–32 pixels)
   - Speed control (Slow, Medium, Fast)
   - Color customization for snow and rain
@@ -131,7 +131,7 @@ If you want to build the extension from source code, follow these steps:
 4. **Configure settings** (optional):
    - Open GNOME Extensions app.
    - Find **Weather Effect** and click the settings icon.
-   - Adjust particle count, size, speed, colors, and display mode.
+   - Adjust particles per monitor, size, speed, colors, and display mode.
 
 ## Project Structure
 
@@ -172,7 +172,7 @@ The extension can be configured through the GNOME Extensions app settings:
 
 - **Effect Type**: Snow or Rain
 - **Display Mode**: Wallpaper only or Full screen overlay
-- **Particle Count**: 5 to 50 particles
+- **Particles per monitor**: 5–50
 - **Particle Size**: 4 to 32 pixels
 - **Speed**: Slow, Medium, or Fast
 - **Snow Color**: White, Light Blue, or Silver

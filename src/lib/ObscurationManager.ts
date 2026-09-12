@@ -9,6 +9,7 @@ type DisplayMode = "wallpaper" | "screen";
  */
 export class ObscurationManager {
   private monitorObscuredCache: Map<number, boolean> = new Map();
+  private fullscreenCoveredMonitorIndexes: Set<number> = new Set();
   private settings: any;
 
   constructor(settings: any) {
@@ -90,57 +91,77 @@ export class ObscurationManager {
   }
 
   /**
-   * Can run on monitor
+   * Get the current monitor actors that may render particles.
    */
-  canRunOnMonitor(
-    monitorActor: MonitorActor,
+  getRunnableMonitorActors(
+    monitorActors: MonitorActor[],
     isOverviewVisible: boolean,
-  ): boolean {
-    if (!this.settings || !monitorActor) return false;
+  ): MonitorActor[] {
+    if (!this.settings || !this.settings.get_boolean("active")) return [];
 
-    const active = this.settings.get_boolean("active");
+    const currentMonitorActors = monitorActors.filter(
+      (monitorActor) =>
+        !!monitorActor?.actor &&
+        !(monitorActor.actor as any)._isDestroyedByGnome,
+    );
     const mode: DisplayMode = this.settings.get_string("display-mode");
 
-    // Screen mode — check for fullscreen windows
     if (mode === "screen") {
-      const activeWs = global.workspace_manager.get_active_workspace();
-      if (!activeWs) return active;
-
-      const windowActors = global.get_window_actors();
-      if (!windowActors) return active;
-
-      const windows = windowActors
-        .map((actor: any) => actor?.meta_window as Meta.Window)
-        .filter((w): w is Meta.Window => {
-          if (!w) return false;
-            return (
-              !w.minimized &&
-              w.get_workspace() === activeWs &&
-              w.get_monitor() === monitorActor.monitor.index &&
-              w.get_window_type() === Meta.WindowType.NORMAL
-            );
-        });
-
-      const pauseOnFullscreen = this.settings.get_boolean(
-        "pause-on-fullscreen",
-      );
-
-      if (pauseOnFullscreen) {
-        const hasFullscreen = windows.some((w) => {
-            return w.is_fullscreen();
-        });
-        if (hasFullscreen) return false;
+      if (!this.settings.get_boolean("pause-on-fullscreen")) {
+        return currentMonitorActors;
       }
 
-      return active;
+      return currentMonitorActors.filter(
+        (monitorActor) =>
+          !this.isMonitorFullscreenCovered(monitorActor.monitor.index),
+      );
     }
 
-    if (isOverviewVisible) return false;
+    if (isOverviewVisible) return [];
 
-    // Wallpaper mode — check obscuration cache
-    const obscured =
-      this.monitorObscuredCache.get(monitorActor.monitor.index) ?? false;
-    return !obscured && active;
+    return currentMonitorActors.filter(
+      (monitorActor) =>
+        !(this.monitorObscuredCache.get(monitorActor.monitor.index) ?? false),
+    );
+  }
+
+  refreshFullscreenState() {
+    const fullscreenCoveredMonitorIndexes = new Set<number>();
+
+    if (
+      this.settings &&
+      this.settings.get_boolean("active") &&
+      this.settings.get_string("display-mode") === "screen" &&
+      this.settings.get_boolean("pause-on-fullscreen")
+    ) {
+      const activeWs = global.workspace_manager.get_active_workspace();
+      const windowActors = activeWs ? global.get_window_actors() : null;
+
+      if (windowActors) {
+        for (const actor of windowActors) {
+          const window = actor?.meta_window as Meta.Window | null;
+          if (
+            window &&
+            !window.minimized &&
+            window.get_workspace() === activeWs &&
+            window.get_window_type() === Meta.WindowType.NORMAL &&
+            window.is_fullscreen()
+          ) {
+            fullscreenCoveredMonitorIndexes.add(window.get_monitor());
+          }
+        }
+      }
+    }
+
+    this.fullscreenCoveredMonitorIndexes = fullscreenCoveredMonitorIndexes;
+  }
+
+  isMonitorFullscreenCovered(monitorIndex: number): boolean {
+    return this.fullscreenCoveredMonitorIndexes.has(monitorIndex);
+  }
+
+  clearFullscreenState() {
+    this.fullscreenCoveredMonitorIndexes.clear();
   }
 
   /**
@@ -169,6 +190,7 @@ export class ObscurationManager {
    */
   clear() {
     this.monitorObscuredCache.clear();
+    this.clearFullscreenState();
   }
 
   /**
