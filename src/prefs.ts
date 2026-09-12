@@ -166,7 +166,7 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
     const rainEmojiRow = new Adw.ComboRow({
       title: "Rain Emoji",
       subtitle: "Choose emoji or leave default shape",
-      model: new Gtk.StringList({ strings: ["Default", "💧"] }),
+      model: new Gtk.StringList({ strings: ["Default", "🌢"] }),
       selected: ["default", "🌢"].indexOf(
         settings.get_string("rain-emoji") || "default"
       ),
