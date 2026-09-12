@@ -2,18 +2,42 @@
 
 set -euo pipefail
 
+GREEN=$'\033[32m'
+RED=$'\033[31m'
+RESET=$'\033[0m'
+
+color_enabled() {
+	[ -z "${NO_COLOR+x}" ] && [ -z "${CI+x}" ] && [ -t "$1" ]
+}
+
+success() {
+	if color_enabled 1; then
+		printf '%s[OK]%s %s\n' "$GREEN" "$RESET" "$1"
+	else
+		printf '[OK] %s\n' "$1"
+	fi
+}
+
+error() {
+	if color_enabled 2; then
+		printf '%s[ERROR]%s %s\n' "$RED" "$RESET" "$1" >&2
+	else
+		printf '[ERROR] %s\n' "$1" >&2
+	fi
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if [ "$#" -ne 1 ]; then
-	echo "Usage: $0 EXTENSION_ZIP" >&2
+	printf 'Usage: %s EXTENSION_ZIP\n' "$0" >&2
 	exit 1
 fi
 
 PACKAGE="$1"
 
 if [ ! -f "$PACKAGE" ] || [ -L "$PACKAGE" ]; then
-	echo "[ERROR] Extension package is not a regular file: $PACKAGE" >&2
+	error "Extension package is not a regular file: $PACKAGE"
 	exit 1
 fi
 
@@ -22,7 +46,7 @@ PACKAGE_CONTENTS="$(unzip -Z1 "$PACKAGE")"
 
 DUPLICATE_ENTRIES="$(printf '%s\n' "$PACKAGE_CONTENTS" | sort | uniq -d)"
 if [ -n "$DUPLICATE_ENTRIES" ]; then
-	echo "[ERROR] Duplicate package entries:" >&2
+	error "Duplicate package entries:"
 	printf '%s\n' "$DUPLICATE_ENTRIES" >&2
 	exit 1
 fi
@@ -48,13 +72,13 @@ SCHEMA_SOURCES=("$ROOT_DIR"/src/schemas/*.gschema.xml)
 shopt -u nullglob
 
 if [ "${#SCHEMA_SOURCES[@]}" -eq 0 ]; then
-	echo "[ERROR] Required schema sources are missing" >&2
+	error "Required schema sources are missing"
 	exit 1
 fi
 
 for module in "${PRODUCTION_MODULES[@]}"; do
 	if [ ! -f "$ROOT_DIR/src/lib/$module.ts" ]; then
-		echo "[ERROR] Required production source is missing: src/lib/$module.ts" >&2
+		error "Required production source is missing: src/lib/$module.ts"
 		exit 1
 	fi
 	EXPECTED_ENTRIES+=("lib/$module.js")
@@ -66,29 +90,29 @@ done
 
 for entry in "${EXPECTED_ENTRIES[@]}"; do
 	if ! grep -Fxq "$entry" <<<"$PACKAGE_CONTENTS"; then
-		echo "[ERROR] Required package entry is missing: $entry" >&2
+		error "Required package entry is missing: $entry"
 		exit 1
 	fi
 done
 
 while IFS= read -r entry; do
 	if ! printf '%s\n' "${EXPECTED_ENTRIES[@]}" | grep -Fxq "$entry"; then
-		echo "[ERROR] Unexpected package entry: $entry" >&2
+		error "Unexpected package entry: $entry"
 		exit 1
 	fi
 done <<<"$PACKAGE_CONTENTS"
 
 if ! unzip -p "$PACKAGE" metadata.json | cmp -s - "$ROOT_DIR/src/metadata.json"; then
-	echo "[ERROR] Packaged metadata.json does not match the source" >&2
+	error "Packaged metadata.json does not match the source"
 	exit 1
 fi
 
 for source in "${SCHEMA_SOURCES[@]}"; do
 	entry="schemas/$(basename "$source")"
 	if ! unzip -p "$PACKAGE" "$entry" | cmp -s - "$source"; then
-		echo "[ERROR] Packaged schema does not match the source: $entry" >&2
+		error "Packaged schema does not match the source: $entry"
 		exit 1
 	fi
 done
 
-echo "[OK] Extension package contains all required files: $PACKAGE"
+success "Extension package contains all required files: $PACKAGE"

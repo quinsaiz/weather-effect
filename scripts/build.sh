@@ -2,15 +2,37 @@
 
 set -euo pipefail
 
-GREEN="\e[32m"
-RED="\e[31m"
-BLUE="\e[34m"
-RESET="\e[0m"
+GREEN=$'\033[32m'
+RED=$'\033[31m'
+BLUE=$'\033[34m'
+RESET=$'\033[0m'
 
-info() { echo -e "${BLUE}[INFO]${RESET} $1"; }
-success() { echo -e "${GREEN}[OK]${RESET} $1"; }
+color_enabled() {
+	[ -z "${NO_COLOR+x}" ] && [ -z "${CI+x}" ] && [ -t "$1" ]
+}
+
+info() {
+	if color_enabled 1; then
+		printf '%s[INFO]%s %s\n' "$BLUE" "$RESET" "$1"
+	else
+		printf '[INFO] %s\n' "$1"
+	fi
+}
+
+success() {
+	if color_enabled 1; then
+		printf '%s[OK]%s %s\n' "$GREEN" "$RESET" "$1"
+	else
+		printf '[OK] %s\n' "$1"
+	fi
+}
+
 error() {
-	echo -e "${RED}[ERROR]${RESET} $1" >&2
+	if color_enabled 2; then
+		printf '%s[ERROR]%s %s\n' "$RED" "$RESET" "$1" >&2
+	else
+		printf '[ERROR] %s\n' "$1" >&2
+	fi
 	exit 1
 }
 
@@ -114,11 +136,27 @@ install_extension() {
 }
 
 uninstall_extension() {
+	if ! command -v gnome-extensions >/dev/null 2>&1; then
+		error "gnome-extensions not found. Please install it."
+	fi
+
 	info "Uninstalling extension..."
-	gnome-extensions uninstall weather-effect@quinsaiz.github &&
-		success "Extension uninstalled successfully! Restart GNOME Shell." ||
+	if ! gnome-extensions uninstall weather-effect@quinsaiz.github; then
 		error "Failed to uninstall extension!"
-	dconf reset -f /org/gnome/shell/extensions/weather-effect/
+	fi
+	success "Extension uninstalled successfully! Restart GNOME Shell."
+}
+
+reset_settings() {
+	if ! command -v dconf >/dev/null 2>&1; then
+		error "dconf not found. Please install it."
+	fi
+
+	info "Resetting Weather Effect settings..."
+	if ! dconf reset -f /org/gnome/shell/extensions/weather-effect/; then
+		error "Failed to reset Weather Effect settings!"
+	fi
+	success "Weather Effect settings reset successfully!"
 }
 
 case "${1:-}" in
@@ -137,8 +175,16 @@ install | -i | --install)
 uninstall | -u | --uninstall)
 	uninstall_extension
 	;;
+reset-settings | --reset-settings)
+	reset_settings
+	;;
 *)
-	echo -e "${RED}Usage:${RESET} $0 [--clean | --pack | --validate-package | --install | --uninstall]"
+	if color_enabled 1; then
+		printf '%sUsage:%s %s [--clean | --pack | --validate-package | --install | --uninstall | --reset-settings]\n' \
+			"$RED" "$RESET" "$0"
+	else
+		printf 'Usage: %s [--clean | --pack | --validate-package | --install | --uninstall | --reset-settings]\n' "$0"
+	fi
 	exit 1
 	;;
 esac

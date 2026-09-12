@@ -10,15 +10,13 @@
     "build": "npm run validate && scripts/build.sh --clean && ./node_modules/.bin/tsc -p tsconfig.json && scripts/build.sh --pack",
     "validate:package": "scripts/build.sh --validate-package",
     "install:extension": "npm run build && scripts/build.sh --install",
-    "uninstall": "scripts/build.sh -u",
-    "delete": "scripts/build.sh -u",
+    "uninstall:extension": "scripts/build.sh --uninstall",
+    "reset:settings": "scripts/build.sh --reset-settings",
     "watch": "tsc -p tsconfig.json -w"
   },
   "devDependencies": {
-    "typescript": "^5.6.3"
-  },
-  "dependencies": {
     "@girs/gjs": "^4.0.4",
-    "@girs/gnome-shell": "^50.0.0"
+    "@girs/gnome-shell": "^50.0.0",
+    "typescript": "^5.6.3"
   }
 }

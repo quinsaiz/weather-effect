@@ -122,6 +122,23 @@ If you want to build the extension from source code, follow these steps:
    This performs a fresh validated build, then installs only the archive created
    by that build into your local GNOME Shell extensions directory.
 
+### Maintenance Commands
+
+Uninstall the extension without changing its saved preferences:
+
+```bash
+npm run uninstall:extension
+```
+
+Reset only the extension's saved preferences:
+
+```bash
+npm run reset:settings
+```
+
+**Warning:** `reset:settings` permanently removes all saved Weather Effect
+settings. It does not uninstall, disable, install, or rebuild the extension.
+
 ## Usage
 
 1. **Open Quick Settings** by clicking the system menu in the top-right corner.
@@ -148,6 +165,7 @@ weather-effect/
 ├── README.md
 ├── scripts/
 │   ├── build.sh                    # Build and installation script
+│   ├── validate-metadata.mjs       # Source metadata semantic validation
 │   ├── validate-package.sh         # Extension archive validation
 │   └── validate.sh                 # Static source validation
 ├── src/
