@@ -1,11 +1,12 @@
 import Adw from "gi://Adw";
-import type Gio from "gi://Gio";
+import Gio from "gi://Gio";
 import Gtk from "gi://Gtk";
 import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 
 export default class WeatherEffectPrefs extends ExtensionPreferences {
   fillPreferencesWindow(window: Adw.PreferencesWindow): Promise<void> {
     const settings = this.getSettings();
+    const mappedSettingsHandlers: number[] = [];
 
     const generalPage = new Adw.PreferencesPage({
       title: "General",
@@ -20,50 +21,67 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
       title: "Effect Type",
       subtitle: "Choose between snow or rain effect",
       model: new Gtk.StringList({ strings: ["Snow", "Rain"] }),
-      selected: settings.get_string("effect-type") === "snow" ? 0 : 1,
     });
+    const syncTypeRow = () => {
+      const selected = settings.get_string("effect-type") === "snow" ? 0 : 1;
+      if (typeRow.selected !== selected) typeRow.selected = selected;
+    };
+    syncTypeRow();
     typeRow.connect("notify::selected", () => {
-      settings.set_string(
-        "effect-type",
-        typeRow.selected === 0 ? "snow" : "rain"
-      );
+      const value = typeRow.selected === 0 ? "snow" : "rain";
+      if (settings.get_string("effect-type") !== value)
+        settings.set_string("effect-type", value);
     });
+    mappedSettingsHandlers.push(
+      settings.connect("changed::effect-type", syncTypeRow)
+    );
     generalGroup.add(typeRow);
 
     const modeRow = new Adw.ComboRow({
       title: "Display Mode",
       subtitle: "Wallpaper only or full screen overlay",
       model: new Gtk.StringList({ strings: ["Wallpaper", "Screen"] }),
-      selected: settings.get_string("display-mode") === "wallpaper" ? 0 : 1,
     });
+    const syncModeRow = () => {
+      const selected =
+        settings.get_string("display-mode") === "wallpaper" ? 0 : 1;
+      if (modeRow.selected !== selected) modeRow.selected = selected;
+    };
+    syncModeRow();
     modeRow.connect("notify::selected", () => {
-      settings.set_string(
-        "display-mode",
-        modeRow.selected === 0 ? "wallpaper" : "screen"
-      );
+      const value = modeRow.selected === 0 ? "wallpaper" : "screen";
+      if (settings.get_string("display-mode") !== value)
+        settings.set_string("display-mode", value);
     });
+    mappedSettingsHandlers.push(
+      settings.connect("changed::display-mode", syncModeRow)
+    );
     generalGroup.add(modeRow);
 
     const quickSettingsRow = new Adw.SwitchRow({
       title: "Show in Quick Settings",
       subtitle:
         "Display the toggle button and icon in the Quick Settings panel",
-      active: settings.get_boolean("show-in-quick-settings"),
     });
-    quickSettingsRow.connect("notify::active", (row: Adw.SwitchRow) => {
-      settings.set_boolean("show-in-quick-settings", row.active);
-    });
+    settings.bind(
+      "show-in-quick-settings",
+      quickSettingsRow,
+      "active",
+      Gio.SettingsBindFlags.DEFAULT
+    );
     generalGroup.add(quickSettingsRow);
 
     const pauseRow = new Adw.SwitchRow({
       title: "Pause on Fullscreen",
       subtitle:
         "When ON and in Screen mode, pause animation on fullscreen windows",
-      active: settings.get_boolean("pause-on-fullscreen"),
     });
-    pauseRow.connect("notify::active", (row: Adw.SwitchRow) => {
-      settings.set_boolean("pause-on-fullscreen", row.active);
-    });
+    settings.bind(
+      "pause-on-fullscreen",
+      pauseRow,
+      "active",
+      Gio.SettingsBindFlags.DEFAULT
+    );
     generalGroup.add(pauseRow);
 
     const particlesPage = new Adw.PreferencesPage({
@@ -104,11 +122,19 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
       model: new Gtk.StringList({
         strings: ["Ultra Slow", "Slow", "Medium", "Fast"],
       }),
-      selected: settings.get_int("speed"),
     });
+    const syncSpeedRow = () => {
+      const selected = settings.get_int("speed");
+      if (speedRow.selected !== selected) speedRow.selected = selected;
+    };
+    syncSpeedRow();
     speedRow.connect("notify::selected", () => {
-      settings.set_int("speed", speedRow.selected);
+      if (settings.get_int("speed") !== speedRow.selected)
+        settings.set_int("speed", speedRow.selected);
     });
+    mappedSettingsHandlers.push(
+      settings.connect("changed::speed", syncSpeedRow)
+    );
     particlesGroup.add(speedRow);
 
     const appearancePage = new Adw.PreferencesPage({
@@ -120,63 +146,100 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
     const appearanceGroup = new Adw.PreferencesGroup({});
     appearancePage.add(appearanceGroup);
 
+    const snowColors = ["white", "lightblue", "silver"];
     const snowColorRow = new Adw.ComboRow({
       title: "Snow Color",
       subtitle: "Color of snow particles",
       model: new Gtk.StringList({ strings: ["White", "Light Blue", "Silver"] }),
-      selected: ["white", "lightblue", "silver"].indexOf(
-        settings.get_string("snow-color")
-      ),
     });
+    const syncSnowColorRow = () => {
+      const index = snowColors.indexOf(settings.get_string("snow-color"));
+      const selected = index < 0 ? Gtk.INVALID_LIST_POSITION : index;
+      if (snowColorRow.selected !== selected) snowColorRow.selected = selected;
+    };
+    syncSnowColorRow();
     snowColorRow.connect("notify::selected", () => {
-      settings.set_string(
-        "snow-color",
-        ["white", "lightblue", "silver"][snowColorRow.selected]
-      );
+      const value = snowColors[snowColorRow.selected];
+      if (value !== undefined && settings.get_string("snow-color") !== value)
+        settings.set_string("snow-color", value);
     });
+    mappedSettingsHandlers.push(
+      settings.connect("changed::snow-color", syncSnowColorRow)
+    );
     appearanceGroup.add(snowColorRow);
 
+    const snowEmojis = ["", "❄", "❅", "❆"];
     const snowEmojiRow = new Adw.ComboRow({
       title: "Snow Emoji",
       subtitle: "Choose emoji or leave default shape",
       model: new Gtk.StringList({ strings: ["Default", "❄", "❅", "❆"] }),
-      selected: ["default", "❄", "❅", "❆"].indexOf(
-        settings.get_string("snow-emoji") || "default"
-      ),
     });
+    const syncSnowEmojiRow = () => {
+      const index = snowEmojis.indexOf(settings.get_string("snow-emoji"));
+      const selected = index < 0 ? Gtk.INVALID_LIST_POSITION : index;
+      if (snowEmojiRow.selected !== selected) snowEmojiRow.selected = selected;
+    };
+    syncSnowEmojiRow();
     snowEmojiRow.connect("notify::selected", () => {
-      const value = ["default", "❄", "❅", "❆"][snowEmojiRow.selected];
-      settings.set_string("snow-emoji", value === "default" ? "" : value);
+      const value = snowEmojis[snowEmojiRow.selected];
+      if (value !== undefined && settings.get_string("snow-emoji") !== value)
+        settings.set_string("snow-emoji", value);
     });
+    mappedSettingsHandlers.push(
+      settings.connect("changed::snow-emoji", syncSnowEmojiRow)
+    );
     appearanceGroup.add(snowEmojiRow);
 
+    const rainColors = ["gray", "darkblue"];
     const rainColorRow = new Adw.ComboRow({
       title: "Rain Color",
       subtitle: "Color of rain particles",
       model: new Gtk.StringList({ strings: ["Gray", "Dark Blue"] }),
-      selected: ["gray", "darkblue"].indexOf(settings.get_string("rain-color")),
     });
+    const syncRainColorRow = () => {
+      const index = rainColors.indexOf(settings.get_string("rain-color"));
+      const selected = index < 0 ? Gtk.INVALID_LIST_POSITION : index;
+      if (rainColorRow.selected !== selected) rainColorRow.selected = selected;
+    };
+    syncRainColorRow();
     rainColorRow.connect("notify::selected", () => {
-      settings.set_string(
-        "rain-color",
-        ["gray", "darkblue"][rainColorRow.selected]
-      );
+      const value = rainColors[rainColorRow.selected];
+      if (value !== undefined && settings.get_string("rain-color") !== value)
+        settings.set_string("rain-color", value);
     });
+    mappedSettingsHandlers.push(
+      settings.connect("changed::rain-color", syncRainColorRow)
+    );
     appearanceGroup.add(rainColorRow);
 
+    const rainEmojis = ["", "🌢"];
     const rainEmojiRow = new Adw.ComboRow({
       title: "Rain Emoji",
       subtitle: "Choose emoji or leave default shape",
       model: new Gtk.StringList({ strings: ["Default", "🌢"] }),
-      selected: ["default", "🌢"].indexOf(
-        settings.get_string("rain-emoji") || "default"
-      ),
     });
+    const syncRainEmojiRow = () => {
+      const index = rainEmojis.indexOf(settings.get_string("rain-emoji"));
+      const selected = index < 0 ? Gtk.INVALID_LIST_POSITION : index;
+      if (rainEmojiRow.selected !== selected) rainEmojiRow.selected = selected;
+    };
+    syncRainEmojiRow();
     rainEmojiRow.connect("notify::selected", () => {
-      const value = ["default", "🌢"][rainEmojiRow.selected];
-      settings.set_string("rain-emoji", value === "default" ? "" : value);
+      const value = rainEmojis[rainEmojiRow.selected];
+      if (value !== undefined && settings.get_string("rain-emoji") !== value)
+        settings.set_string("rain-emoji", value);
     });
+    mappedSettingsHandlers.push(
+      settings.connect("changed::rain-emoji", syncRainEmojiRow)
+    );
     appearanceGroup.add(rainEmojiRow);
+
+    // GSettings outlives Preferences widgets, so mapped handlers belong to the window.
+    const disconnectMappedSettingsHandlers = () => {
+      for (const handlerId of mappedSettingsHandlers.splice(0))
+        settings.disconnect(handlerId);
+    };
+    window.connect("destroy", disconnectMappedSettingsHandlers);
 
     return Promise.resolve();
   }
@@ -197,10 +260,6 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
       upper: range[1],
       step_increment: range[2],
     });
-    row.value = settings.get_int(key);
-    row.connect("notify::value", (spin: Adw.SpinRow) => {
-      const newValue = spin.get_value();
-      settings.set_int(key, newValue);
-    });
+    settings.bind(key, row, "value", Gio.SettingsBindFlags.DEFAULT);
   }
 }
