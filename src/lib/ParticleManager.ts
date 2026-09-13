@@ -8,7 +8,6 @@ export type EffectType = "snow" | "rain";
 
 type ParticleActor = St.Widget & {
   _weatherDestroyed?: boolean;
-  _weatherDisposed?: boolean;
 };
 
 export interface ParticleTarget {
@@ -75,14 +74,6 @@ export class ParticleManager {
         this.clearMonitorState(state);
       }
     }
-  }
-
-  clearMonitor(monitorActor: MonitorActor): void {
-    const state = this.monitorStates.get(monitorActor);
-    if (!state) return;
-
-    state.target = null;
-    this.clearMonitorState(state);
   }
 
   clearAll(): void {
@@ -167,7 +158,7 @@ export class ParticleManager {
 
     while (state.particles.length > target.count) {
       const particle = state.particles.pop();
-      if (particle) this.retireParticle(state, particle, false);
+      if (particle) this.retireParticle(state, particle);
     }
 
     while (state.particles.length < target.count) {
@@ -182,10 +173,7 @@ export class ParticleManager {
     for (let index = state.particles.length - 1; index >= 0; index--) {
       const particle = state.particles[index];
 
-      if (
-        !particle ||
-        particle._weatherDestroyed || particle._weatherDisposed
-      ) {
+      if (!particle || particle._weatherDestroyed) {
         state.particles.splice(index, 1);
         continue;
       }
@@ -194,7 +182,7 @@ export class ParticleManager {
         const currentX = particle.x;
         const currentY = particle.y;
 
-        this.retireParticle(state, particle, true);
+        this.retireParticle(state, particle);
 
         if (!state.target) continue;
 
@@ -286,7 +274,6 @@ export class ParticleManager {
     const actor = monitorActor.actor;
     if (
       particle._weatherDestroyed ||
-      particle._weatherDisposed ||
       !actor ||
       actor._weatherDestroyed
     ) {
@@ -319,14 +306,6 @@ export class ParticleManager {
     particle: ParticleActor,
   ): void {
     if (
-      particle._weatherDestroyed || particle._weatherDisposed
-    ) {
-      return;
-    }
-
-    const actor = monitorActor.actor;
-    if (!actor || actor._weatherDestroyed) return;
-    if (
       !this.settings ||
       this.monitorStates.get(monitorActor) !== state ||
       !state.target ||
@@ -334,6 +313,14 @@ export class ParticleManager {
     ) {
       return;
     }
+
+    const actor = monitorActor.actor;
+    if (
+      !actor ||
+      actor._weatherDestroyed ||
+      particle._weatherDestroyed
+    )
+      return;
 
     particle.y = -20;
     particle.x = Math.random() * Math.max(1, monitorActor.monitor.width);
@@ -343,7 +330,7 @@ export class ParticleManager {
     this.updateParticleStyle(particle, type);
 
     if (!this.settings.get_boolean("active")) {
-      this.retireParticle(state, particle, true);
+      this.retireParticle(state, particle);
       return;
     }
 
@@ -352,7 +339,7 @@ export class ParticleManager {
 
   private clearMonitorState(state: MonitorParticleState): void {
     for (const particle of [...state.particles]) {
-      this.retireParticle(state, particle, true);
+      this.retireParticle(state, particle);
     }
     state.particles = [];
   }
@@ -360,13 +347,11 @@ export class ParticleManager {
   private retireParticle(
     state: MonitorParticleState,
     particle: ParticleActor,
-    markDisposed: boolean,
   ): void {
     const index = state.particles.indexOf(particle);
     if (index !== -1) state.particles.splice(index, 1);
 
     if (particle._weatherDestroyed) return;
-    if (markDisposed) particle._weatherDisposed = true;
     particle.remove_all_transitions();
     particle.destroy();
   }
