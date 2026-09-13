@@ -20,6 +20,8 @@ export class MonitorManager {
   private settings: Gio.Settings | null;
   private uiGroup: Clutter.Actor | null = null;
   private uiGroupDestroyId: number | null = null;
+  private screenShieldGroup: Clutter.Actor | null = null;
+  private screenShieldGroupDestroyId: number | null = null;
   private backgroundGroup: Clutter.Actor | null = null;
   private backgroundGroupDestroyId: number | null = null;
   private wallpaperUsesUiGroup = false;
@@ -37,6 +39,17 @@ export class MonitorManager {
       });
     } else {
       this.shellContainersAvailable = false;
+    }
+
+    this.screenShieldGroup = Main.layoutManager.screenShieldGroup ?? null;
+    if (this.screenShieldGroup) {
+      this.screenShieldGroupDestroyId = this.screenShieldGroup.connect(
+        "destroy",
+        () => {
+          this.screenShieldGroup = null;
+          this.screenShieldGroupDestroyId = null;
+        },
+      );
     }
 
     this.backgroundGroup =
@@ -76,6 +89,11 @@ export class MonitorManager {
       return this.backgroundGroup;
     }
 
+    if (mode === "screen") {
+      if (!this.uiGroup || !this.screenShieldGroup) return null;
+      if (this.screenShieldGroup.get_parent() !== this.uiGroup) return null;
+    }
+
     return this.uiGroup;
   }
 
@@ -107,6 +125,13 @@ export class MonitorManager {
     const targetContainer = this.getTargetContainer();
     if (!targetContainer) return false;
 
+    const mode = this.settings?.get_string("display-mode") as
+      | "screen"
+      | "wallpaper";
+    const screenShieldGroup =
+      mode === "screen" ? this.screenShieldGroup : null;
+    if (mode === "screen" && !screenShieldGroup) return false;
+
     for (const monitorActor of this.monitorActors) {
       if (
         !monitorActor.actor || monitorActor.actor._weatherDestroyed
@@ -116,7 +141,14 @@ export class MonitorManager {
       const parent = monitorActor.actor.get_parent();
       if (parent) parent.remove_child(monitorActor.actor);
 
-      targetContainer.add_child(monitorActor.actor);
+      if (screenShieldGroup) {
+        targetContainer.insert_child_below(
+          monitorActor.actor,
+          screenShieldGroup,
+        );
+      } else {
+        targetContainer.add_child(monitorActor.actor);
+      }
     }
 
     return this.updateMonitorActors();
@@ -203,6 +235,7 @@ export class MonitorManager {
       width: monitor.width,
       height: monitor.height,
       reactive: false,
+      clip_to_allocation: true,
       x: monitor.x,
       y: monitor.y,
     }) as MonitorLayerActor;
@@ -229,6 +262,15 @@ export class MonitorManager {
     }
     this.uiGroupDestroyId = null;
     this.uiGroup = null;
+
+    if (
+      this.screenShieldGroupDestroyId !== null &&
+      this.screenShieldGroup
+    ) {
+      this.screenShieldGroup.disconnect(this.screenShieldGroupDestroyId);
+    }
+    this.screenShieldGroupDestroyId = null;
+    this.screenShieldGroup = null;
 
     if (
       this.backgroundGroupDestroyId !== null &&
