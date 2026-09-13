@@ -76,6 +76,21 @@ export class ParticleManager {
     }
   }
 
+  refreshAppearance(): void {
+    if (!this.settings) return;
+
+    const type = this.settings.get_string("effect-type") as EffectType;
+    const speed = this.settings.get_int("speed");
+    for (const [monitorActor, state] of this.monitorStates) {
+      const target = state.target;
+      if (!target) continue;
+
+      target.type = type;
+      target.speed = speed;
+      this.reconcileMonitorState(monitorActor, state, target, true);
+    }
+  }
+
   clearAll(): void {
     for (const state of this.monitorStates.values()) {
       state.target = null;
@@ -152,6 +167,7 @@ export class ParticleManager {
     monitorActor: MonitorActor,
     state: MonitorParticleState,
     target: ParticleTarget,
+    refreshStyle = false,
   ): void {
     const actor = monitorActor.actor;
     if (!actor || actor._weatherDestroyed) return;
@@ -197,7 +213,10 @@ export class ParticleManager {
         replacement.y = currentY;
         state.particles.push(replacement);
         this.animateParticle(monitorActor, state, replacement, target.speed);
+        continue;
       }
+
+      if (refreshStyle) this.updateParticleStyle(particle, target.type);
     }
   }
 
@@ -325,9 +344,7 @@ export class ParticleManager {
     particle.y = -20;
     particle.x = Math.random() * Math.max(1, monitorActor.monitor.width);
 
-    const type = this.settings.get_string("effect-type") as EffectType;
     const speed = this.settings.get_int("speed");
-    this.updateParticleStyle(particle, type);
 
     if (!this.settings.get_boolean("active")) {
       this.retireParticle(state, particle);

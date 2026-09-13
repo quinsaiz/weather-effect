@@ -23,7 +23,6 @@ export class WeatherEffectController {
 
   // Centralized timeout tracking to prevent memory leaks
   private _timeouts: Set<number> = new Set();
-  private timeoutId: number | null = null;
   private _debounceTimeout: number | null = null;
   private _fullscreenRefreshPending: boolean = false;
   private _grabDragTimeout: number | null = null;
@@ -106,7 +105,7 @@ export class WeatherEffectController {
 
     this._stopAllTimeouts();
     this._disconnectAllHandlers();
-    this._stopAnimation();
+    this._particleManager?.clearAll();
     this._destroyUIAndManagers();
   }
 
@@ -158,7 +157,7 @@ export class WeatherEffectController {
       "showing",
       () => {
         if (!this._isEnabled) return;
-        this._reconcileAnimation(true);
+        this._reconcileParticles(true);
       },
       this,
     );
@@ -168,7 +167,7 @@ export class WeatherEffectController {
       () => {
         if (!this._isEnabled) return;
         this._recomputeObscuration();
-        this._reconcileAnimation();
+        this._reconcileParticles();
       },
       this,
     );
@@ -181,6 +180,52 @@ export class WeatherEffectController {
           if (!this._isEnabled) return;
           this._refreshFullscreenStateAndReconcile();
         },
+        this,
+      );
+
+      const reconcileParticles = () => {
+        if (!this._isEnabled) return;
+        this._reconcileParticles();
+      };
+      this._settings.connectObject(
+        "changed::particle-count",
+        reconcileParticles,
+        this,
+      );
+
+      const refreshParticleAppearance = () => {
+        if (!this._isEnabled) return;
+        this._particleManager?.refreshAppearance();
+      };
+      const refreshSnowAppearance = () => {
+        if (
+          !this._isEnabled ||
+          this._settings?.get_string("effect-type") !== "snow"
+        )
+          return;
+        this._particleManager?.refreshAppearance();
+      };
+      const refreshRainAppearance = () => {
+        if (
+          !this._isEnabled ||
+          this._settings?.get_string("effect-type") !== "rain"
+        )
+          return;
+        this._particleManager?.refreshAppearance();
+      };
+      this._settings.connectObject(
+        "changed::effect-type",
+        refreshParticleAppearance,
+        "changed::particle-size",
+        refreshParticleAppearance,
+        "changed::snow-color",
+        refreshSnowAppearance,
+        "changed::snow-emoji",
+        refreshSnowAppearance,
+        "changed::rain-color",
+        refreshRainAppearance,
+        "changed::rain-emoji",
+        refreshRainAppearance,
         this,
       );
 
@@ -198,7 +243,7 @@ export class WeatherEffectController {
         () => {
           if (!this._isEnabled || !this._monitorManager) return;
 
-          this._stopAnimation();
+          this._particleManager?.clearAll();
           this._monitorManager?.attachMonitorActors();
           this._recomputeObscuration();
           this._refreshFullscreenStateAndReconcile();
@@ -235,7 +280,6 @@ export class WeatherEffectController {
       () => {
         if (!this._isEnabled) return;
         if (!this._monitorManager?.updateMonitorActors()) {
-          this.timeoutId = this._removeTimeout(this.timeoutId);
           this._particleManager?.clearAll();
           return;
         }
@@ -365,7 +409,7 @@ export class WeatherEffectController {
               return GLib.SOURCE_REMOVE;
             }
             this._recomputeObscuration();
-            this._reconcileAnimation();
+            this._reconcileParticles();
             return GLib.SOURCE_CONTINUE;
           },
         );
@@ -391,7 +435,6 @@ export class WeatherEffectController {
     this._timeouts.forEach((id) => GLib.source_remove(id));
     this._timeouts.clear();
 
-    this.timeoutId = null;
     this._debounceTimeout = null;
     this._fullscreenRefreshPending = false;
     this._grabDragTimeout = null;
@@ -455,7 +498,7 @@ export class WeatherEffectController {
         this._fullscreenRefreshPending = false;
         this._refreshFullscreenStateAndReconcile();
       } else {
-        this._reconcileAnimation();
+        this._reconcileParticles();
       }
       this._debounceTimeout = null;
       return GLib.SOURCE_REMOVE;
@@ -466,46 +509,32 @@ export class WeatherEffectController {
     if (!this._isEnabled || !this._obscurationManager) return;
     if (!this._monitorManager?.hasAvailableContainer()) {
       this._fullscreenRefreshPending = false;
-      this.timeoutId = this._removeTimeout(this.timeoutId);
       this._particleManager?.clearAll();
       return;
     }
 
     this._fullscreenRefreshPending = false;
     this._obscurationManager.refreshFullscreenState();
-    this._reconcileAnimation();
+    this._reconcileParticles();
   }
 
   /**
-   * Reconcile particles and the management source with current monitor state.
+   * Reconcile particles with current monitor state.
    */
-  private _reconcileAnimation(isOverviewVisible?: boolean) {
-    if (!this._monitorManager?.hasAvailableContainer()) {
-      this.timeoutId = this._removeTimeout(this.timeoutId);
-      this._particleManager?.clearAll();
-      return;
-    }
-
-    const overviewVisible = isOverviewVisible ?? Main.overview.visible;
-    const canRender = this._maintainParticles(overviewVisible);
-
-    if (canRender) {
-      this._startAnimation();
-    } else {
-      this.timeoutId = this._removeTimeout(this.timeoutId);
-    }
-  }
-
-  private _maintainParticles(isOverviewVisible?: boolean): boolean {
+  private _reconcileParticles(isOverviewVisible?: boolean) {
     if (
       !this._isEnabled ||
       !this._monitorManager ||
-      !this._monitorManager.hasAvailableContainer() ||
       !this._obscurationManager ||
       !this._particleManager ||
       !this._settings
     ) {
-      return false;
+      return;
+    }
+
+    if (!this._monitorManager.hasAvailableContainer()) {
+      this._particleManager.clearAll();
+      return;
     }
 
     const overviewVisible = isOverviewVisible ?? Main.overview.visible;
@@ -527,45 +556,6 @@ export class WeatherEffectController {
     }));
 
     this._particleManager.reconcile(monitorActors, targets);
-
-    if (runnableMonitorActors.length === 0) {
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * Start particle animation loop.
-   */
-  private _startAnimation() {
-    if (
-      this.timeoutId ||
-      !this._isEnabled ||
-      !this._monitorManager?.hasAvailableContainer() ||
-      !this._settings
-    )
-      return;
-
-    this.timeoutId = this._addTimeout(GLib.PRIORITY_DEFAULT, 50, () => {
-      if (!this._isEnabled) {
-        this.timeoutId = null;
-        return GLib.SOURCE_REMOVE;
-      }
-      if (!this._maintainParticles()) {
-        this.timeoutId = null;
-        return GLib.SOURCE_REMOVE;
-      }
-      return GLib.SOURCE_CONTINUE;
-    });
-  }
-
-  /**
-   * Stop animation and retire all particles.
-   */
-  private _stopAnimation() {
-    this.timeoutId = this._removeTimeout(this.timeoutId);
-    this._particleManager?.clearAll();
   }
 
   /**
