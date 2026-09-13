@@ -4,6 +4,12 @@ import Meta from "gi://Meta";
 import type { MonitorActor, ShellMonitor } from "./MonitorManager.js";
 
 type DisplayMode = "wallpaper" | "screen";
+type CoverageRectangle = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+};
 
 /**
  * Detect whether a monitor is obscured by windows
@@ -15,80 +21,6 @@ export class ObscurationManager {
 
   constructor(settings: Gio.Settings) {
     this.settings = settings;
-  }
-
-  /**
-   * Is monitor obscured by a window
-   */
-  isMonitorObscured(monitor: ShellMonitor): boolean {
-    if (!monitor || typeof monitor.index !== "number") {
-      return false;
-    }
-
-    const activeWs = global.workspace_manager.get_active_workspace();
-    if (!activeWs) {
-      return false;
-    }
-
-    const workArea = {
-      x1: monitor.x,
-      y1: monitor.y,
-      x2: monitor.x + monitor.width,
-      y2: monitor.y + monitor.height,
-    };
-
-    const windowActors = global.get_window_actors();
-    if (!windowActors) {
-      return false;
-    }
-
-    const windows = windowActors
-      .map((actor) => {
-        return actor?.meta_window;
-      })
-      .filter((w): w is Meta.Window => {
-        if (!w) return false;
-        return (
-          !w.minimized &&
-          w.get_workspace() === activeWs &&
-          w.get_monitor() === monitor.index &&
-          w.get_window_type() === Meta.WindowType.NORMAL
-        );
-      });
-
-    const hasFullscreen = windows.some((w) => {
-        return w.is_fullscreen();
-    });
-
-    if (hasFullscreen) {
-      return true;
-    }
-
-    // Calculate rectangle coverage
-    const rects = windows
-      .map((w) => {
-        if (!w) return null;
-        const r = w.get_frame_rect();
-        if (!r) return null;
-        const x1 = Math.max(r.x, workArea.x1);
-        const y1 = Math.max(r.y, workArea.y1);
-        const x2 = Math.min(r.x + r.width, workArea.x2);
-        const y2 = Math.min(r.y + r.height, workArea.y2);
-        return x2 > x1 && y2 > y1 ? { x1, y1, x2, y2 } : null;
-      })
-      .filter(
-        (r): r is { x1: number; y1: number; x2: number; y2: number } =>
-          r !== null && r.x2 > r.x1 && r.y2 > r.y1,
-      );
-
-    if (!rects || rects.length === 0) {
-      return false;
-    }
-
-    const covered = this._rectUnionArea(rects);
-    const area = monitor.width * monitor.height;
-    const ratio = covered / area;
-    return ratio >= 0.95;
   }
 
   /**
@@ -178,11 +110,80 @@ export class ObscurationManager {
       return;
     }
 
-    for (const ma of monitorActors) {
-      if (!ma || !ma.monitor) continue;
+    const monitorCoverage = new Map<
+      number,
+      {
+        monitor: ShellMonitor;
+        x1: number;
+        y1: number;
+        x2: number;
+        y2: number;
+        rectangles: CoverageRectangle[];
+        hasFullscreen: boolean;
+      }
+    >();
+    for (const monitorActor of monitorActors) {
+      if (!monitorActor?.monitor) continue;
 
-      const nowObscured = this.isMonitorObscured(ma.monitor);
-      this.monitorObscuredCache.set(ma.monitor.index, nowObscured);
+      monitorCoverage.set(monitorActor.monitor.index, {
+        monitor: monitorActor.monitor,
+        x1: monitorActor.monitor.x,
+        y1: monitorActor.monitor.y,
+        x2: monitorActor.monitor.x + monitorActor.monitor.width,
+        y2: monitorActor.monitor.y + monitorActor.monitor.height,
+        rectangles: [],
+        hasFullscreen: false,
+      });
+    }
+
+    if (monitorCoverage.size === 0) return;
+
+    const activeWs = global.workspace_manager.get_active_workspace();
+    const windowActors = activeWs ? global.get_window_actors() : null;
+
+    if (windowActors) {
+      for (const actor of windowActors) {
+        const window = actor?.meta_window;
+        if (
+          !window ||
+          window.minimized ||
+          window.get_workspace() !== activeWs ||
+          window.get_window_type() !== Meta.WindowType.NORMAL
+        ) {
+          continue;
+        }
+
+        const monitorIndex = window.get_monitor();
+        const isFullscreen = window.is_fullscreen();
+        const coverage = monitorCoverage.get(monitorIndex);
+        if (!coverage) continue;
+
+        if (isFullscreen) {
+          coverage.hasFullscreen = true;
+          continue;
+        }
+
+        const frameRect = window.get_frame_rect();
+        if (!frameRect) continue;
+
+        const x1 = Math.max(frameRect.x, coverage.x1);
+        const y1 = Math.max(frameRect.y, coverage.y1);
+        const x2 = Math.min(frameRect.x + frameRect.width, coverage.x2);
+        const y2 = Math.min(frameRect.y + frameRect.height, coverage.y2);
+        if (x2 <= x1 || y2 <= y1) continue;
+
+        coverage.rectangles.push({ x1, y1, x2, y2 });
+      }
+    }
+
+    for (const coverage of monitorCoverage.values()) {
+      const monitor = coverage.monitor;
+      const area = monitor.width * monitor.height;
+      const nowObscured =
+        coverage.hasFullscreen ||
+        (coverage.rectangles.length > 0 &&
+          this._rectUnionArea(coverage.rectangles) / area >= 0.95);
+      this.monitorObscuredCache.set(monitor.index, nowObscured);
     }
   }
 
@@ -198,7 +199,7 @@ export class ObscurationManager {
    * Compute union area of rectangles
    */
   private _rectUnionArea(
-    rects: { x1: number; y1: number; x2: number; y2: number }[],
+    rects: CoverageRectangle[],
   ): number {
     const events: { x: number; y1: number; y2: number; type: number }[] = [];
 
