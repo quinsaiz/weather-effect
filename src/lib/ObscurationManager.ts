@@ -30,11 +30,11 @@ export class ObscurationManager {
     monitorActors: MonitorActor[],
     isOverviewVisible: boolean,
   ): MonitorActor[] {
-    if (!this.settings || !this.settings.get_boolean("active")) return [];
+    if (!this.settings.get_boolean("active")) return [];
 
     const currentMonitorActors = monitorActors.filter(
       (monitorActor) =>
-        !!monitorActor?.actor &&
+        !!monitorActor.actor &&
         !monitorActor.actor._weatherDestroyed,
     );
     const mode = this.settings.get_string("display-mode") as DisplayMode;
@@ -62,7 +62,6 @@ export class ObscurationManager {
     const fullscreenCoveredMonitorIndexes = new Set<number>();
 
     if (
-      this.settings &&
       this.settings.get_boolean("active") &&
       this.settings.get_string("display-mode") === "screen" &&
       this.settings.get_boolean("pause-on-fullscreen")
@@ -101,8 +100,6 @@ export class ObscurationManager {
    * Recompute obscuration for all monitors
    */
   recomputeObscuration(monitorActors: MonitorActor[]) {
-    if (!this.settings || !monitorActors) return;
-
     const mode = this.settings.get_string("display-mode") as DisplayMode;
 
     if (mode === "screen") {
@@ -123,8 +120,6 @@ export class ObscurationManager {
       }
     >();
     for (const monitorActor of monitorActors) {
-      if (!monitorActor?.monitor) continue;
-
       monitorCoverage.set(monitorActor.monitor.index, {
         monitor: monitorActor.monitor,
         x1: monitorActor.monitor.x,

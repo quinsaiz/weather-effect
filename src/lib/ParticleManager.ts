@@ -189,7 +189,7 @@ export class ParticleManager {
     for (let index = state.particles.length - 1; index >= 0; index--) {
       const particle = state.particles[index];
 
-      if (!particle || particle._weatherDestroyed) {
+      if (particle._weatherDestroyed) {
         state.particles.splice(index, 1);
         continue;
       }

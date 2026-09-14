@@ -14,7 +14,7 @@ type DisplayMode = "wallpaper" | "screen";
  * Coordinates different managers and safely handles GNOME Shell lifecycle.
  */
 export class WeatherEffectController {
-  private _settings: Gio.Settings | null;
+  private readonly _settings: Gio.Settings;
   private _indicator: InstanceType<typeof WeatherIndicator> | null = null;
   private _monitorManager: MonitorManager | null = null;
   private _obscurationManager: ObscurationManager | null = null;
@@ -70,18 +70,12 @@ export class WeatherEffectController {
     this._isEnabled = true;
 
     // Initialize managers
-    this._monitorManager = new MonitorManager(this._settings as Gio.Settings);
-    this._obscurationManager = new ObscurationManager(
-      this._settings as Gio.Settings,
-    );
-    this._particleManager = new ParticleManager(
-      this._settings as Gio.Settings,
-    );
+    this._monitorManager = new MonitorManager(this._settings);
+    this._obscurationManager = new ObscurationManager(this._settings);
+    this._particleManager = new ParticleManager(this._settings);
 
     // Create UI if configured
-    if (
-      (this._settings as Gio.Settings).get_boolean("show-in-quick-settings")
-    ) {
+    if (this._settings.get_boolean("show-in-quick-settings")) {
       this._createIndicator();
     }
 
@@ -113,7 +107,7 @@ export class WeatherEffectController {
    * Create the Quick Settings indicator.
    */
   private _createIndicator() {
-    if (this._indicator || !this._settings) return;
+    if (this._indicator) return;
 
     this._indicator = new (WeatherIndicator as typeof WeatherIndicator & {
       new (settings: Gio.Settings): InstanceType<typeof WeatherIndicator>;
@@ -137,8 +131,6 @@ export class WeatherEffectController {
    * Handle show-in-quick-settings setting change.
    */
   private _onShowInQuickSettingsChanged() {
-    if (!this._isEnabled || !this._settings) return;
-
     const show = this._settings.get_boolean("show-in-quick-settings");
 
     if (show && !this._indicator) {
@@ -173,94 +165,92 @@ export class WeatherEffectController {
     );
 
     // Settings events
-    if (this._settings) {
-      this._settings.connectObject(
-        "changed::active",
-        () => {
-          if (!this._isEnabled) return;
-          this._refreshFullscreenStateAndReconcile();
-        },
-        this,
-      );
-
-      const reconcileParticles = () => {
+    this._settings.connectObject(
+      "changed::active",
+      () => {
         if (!this._isEnabled) return;
-        this._reconcileParticles();
-      };
-      this._settings.connectObject(
-        "changed::particle-count",
-        reconcileParticles,
-        this,
-      );
+        this._refreshFullscreenStateAndReconcile();
+      },
+      this,
+    );
 
-      const refreshParticleAppearance = () => {
+    const reconcileParticles = () => {
+      if (!this._isEnabled) return;
+      this._reconcileParticles();
+    };
+    this._settings.connectObject(
+      "changed::particle-count",
+      reconcileParticles,
+      this,
+    );
+
+    const refreshParticleAppearance = () => {
+      if (!this._isEnabled) return;
+      this._particleManager?.refreshAppearance();
+    };
+    const refreshSnowAppearance = () => {
+      if (
+        !this._isEnabled ||
+        this._settings.get_string("effect-type") !== "snow"
+      )
+        return;
+      this._particleManager?.refreshAppearance();
+    };
+    const refreshRainAppearance = () => {
+      if (
+        !this._isEnabled ||
+        this._settings.get_string("effect-type") !== "rain"
+      )
+        return;
+      this._particleManager?.refreshAppearance();
+    };
+    this._settings.connectObject(
+      "changed::effect-type",
+      refreshParticleAppearance,
+      "changed::particle-size",
+      refreshParticleAppearance,
+      "changed::snow-color",
+      refreshSnowAppearance,
+      "changed::snow-emoji",
+      refreshSnowAppearance,
+      "changed::rain-color",
+      refreshRainAppearance,
+      "changed::rain-emoji",
+      refreshRainAppearance,
+      this,
+    );
+
+    this._settings.connectObject(
+      "changed::show-in-quick-settings",
+      () => {
         if (!this._isEnabled) return;
-        this._particleManager?.refreshAppearance();
-      };
-      const refreshSnowAppearance = () => {
-        if (
-          !this._isEnabled ||
-          this._settings?.get_string("effect-type") !== "snow"
-        )
-          return;
-        this._particleManager?.refreshAppearance();
-      };
-      const refreshRainAppearance = () => {
-        if (
-          !this._isEnabled ||
-          this._settings?.get_string("effect-type") !== "rain"
-        )
-          return;
-        this._particleManager?.refreshAppearance();
-      };
-      this._settings.connectObject(
-        "changed::effect-type",
-        refreshParticleAppearance,
-        "changed::particle-size",
-        refreshParticleAppearance,
-        "changed::snow-color",
-        refreshSnowAppearance,
-        "changed::snow-emoji",
-        refreshSnowAppearance,
-        "changed::rain-color",
-        refreshRainAppearance,
-        "changed::rain-emoji",
-        refreshRainAppearance,
-        this,
-      );
+        this._onShowInQuickSettingsChanged();
+      },
+      this,
+    );
 
-      this._settings.connectObject(
-        "changed::show-in-quick-settings",
-        () => {
-          if (!this._isEnabled) return;
-          this._onShowInQuickSettingsChanged();
-        },
-        this,
-      );
+    this._settings.connectObject(
+      "changed::display-mode",
+      () => {
+        if (!this._isEnabled || !this._monitorManager) return;
 
-      this._settings.connectObject(
-        "changed::display-mode",
-        () => {
-          if (!this._isEnabled || !this._monitorManager) return;
+        this._particleManager?.clearAll();
+        this._monitorManager?.attachMonitorActors();
+        this._recomputeObscuration();
+        this._refreshFullscreenStateAndReconcile();
+      },
+      this,
+    );
 
-          this._particleManager?.clearAll();
-          this._monitorManager?.attachMonitorActors();
-          this._recomputeObscuration();
-          this._refreshFullscreenStateAndReconcile();
-        },
-        this,
-      );
-
-      this._settings.connectObject(
-        "changed::pause-on-fullscreen",
-        () => {
-          if (!this._isEnabled || !this._monitorManager || !this._obscurationManager) return;
-          this._recomputeObscuration();
-          this._refreshFullscreenStateAndReconcile();
-        },
-        this,
-      );
-    }
+    this._settings.connectObject(
+      "changed::pause-on-fullscreen",
+      () => {
+        if (!this._isEnabled || !this._monitorManager || !this._obscurationManager) return;
+        this._recomputeObscuration();
+        this._refreshFullscreenStateAndReconcile();
+      },
+      this,
+    );
 
     // Monitor and Layout events
     Main.layoutManager.connectObject(
@@ -294,9 +284,7 @@ export class WeatherEffectController {
       "active-workspace-changed",
       () => {
         if (!this._isEnabled) return;
-        const mode = (this._settings as Gio.Settings).get_string(
-          "display-mode",
-        ) as DisplayMode;
+        const mode = this._settings.get_string("display-mode") as DisplayMode;
         if (mode === "wallpaper") {
           this._particleManager?.clearAll();
         }
@@ -444,9 +432,7 @@ export class WeatherEffectController {
    * Disconnect all handlers automatically by target object.
    */
   private _disconnectAllHandlers() {
-    if (this._settings) {
-      this._settings.disconnectObject(this);
-    }
+    this._settings.disconnectObject(this);
 
     Main.overview.disconnectObject(this);
     Main.layoutManager.disconnectObject(this);
@@ -473,7 +459,6 @@ export class WeatherEffectController {
 
     this._particleManager?.destroy();
     this._particleManager = null;
-    this._settings = null;
   }
 
   /**
@@ -526,8 +511,7 @@ export class WeatherEffectController {
       !this._isEnabled ||
       !this._monitorManager ||
       !this._obscurationManager ||
-      !this._particleManager ||
-      !this._settings
+      !this._particleManager
     ) {
       return;
     }

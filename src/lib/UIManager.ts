@@ -206,10 +206,7 @@ export const WeatherIndicator = GObject.registerClass(
       )
         return;
       const effectType = this._settings.get_string("effect-type") as EffectType;
-      let checked = false;
-      if (this.toggle.checked !== undefined) {
-        checked = this.toggle.checked;
-      }
+      const checked = this.toggle.checked;
       this._indicator.icon_name = checked
         ? effectType === "snow"
           ? "weather-snow-symbolic"
