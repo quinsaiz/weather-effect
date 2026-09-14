@@ -3,19 +3,24 @@ import type Gio from "gi://Gio";
 import St from "gi://St";
 
 import type { MonitorLayerRecord } from "./MonitorManager.js";
-
-export type EffectType = "snow" | "rain";
+import type { ParticleEffectType } from "./ParticleProfiles.js";
 
 type ParticleActor = St.Widget & {
   // Shell container destruction can precede manager cleanup.
   _weatherDestroyed?: boolean;
 };
 
-export interface ParticleTarget {
-  monitorActor: MonitorLayerRecord;
-  type: EffectType;
+export interface ParticleTargetValues {
+  type: ParticleEffectType;
   count: number;
+  size: number;
   speed: number;
+  emoji: string | null;
+  color: string;
+}
+
+export interface ParticleTarget extends ParticleTargetValues {
+  monitorActor: MonitorLayerRecord;
 }
 
 interface MonitorParticleState {
@@ -66,29 +71,39 @@ export class ParticleManager {
       const state = this.monitorStates.get(monitorActor);
       if (!state) continue;
 
+      const previousTarget = state.target;
       const target = targetByMonitor.get(monitorActor) ?? null;
       state.target = target;
 
       if (target) {
-        this.reconcileMonitorState(monitorActor, state, target);
+        this.reconcileMonitorState(
+          monitorActor,
+          state,
+          target,
+          this.hasAppearanceChanged(previousTarget, target),
+        );
       } else {
         this.clearMonitorState(state);
       }
     }
   }
 
-  refreshAppearance(): void {
+  refreshAppearance(values: ParticleTargetValues): void {
     if (!this.settings) return;
 
-    const type = this.settings.get_string("effect-type") as EffectType;
-    const speed = this.settings.get_int("speed");
     for (const [monitorActor, state] of this.monitorStates) {
       const target = state.target;
       if (!target) continue;
 
-      target.type = type;
-      target.speed = speed;
-      this.reconcileMonitorState(monitorActor, state, target, true);
+      const updatedTarget: ParticleTarget = {
+        ...target,
+        type: values.type,
+        size: values.size,
+        emoji: values.emoji,
+        color: values.color,
+      };
+      state.target = updatedTarget;
+      this.refreshMonitorAppearance(monitorActor, state, updatedTarget, true);
     }
   }
 
@@ -220,13 +235,30 @@ export class ParticleManager {
     }
 
     while (state.particles.length < target.count) {
-      const particle = this.createParticle(monitorActor, state, target.type);
+      const particle = this.createParticle(monitorActor, state, target);
       if (!particle) break;
 
       particle.y = Math.random() * Math.max(1, monitorActor.monitor.height) - 20;
       state.particles.push(particle);
       this.animateParticle(monitorActor, state, particle, target.speed);
     }
+
+    this.refreshMonitorAppearance(
+      monitorActor,
+      state,
+      target,
+      refreshStyle,
+    );
+  }
+
+  private refreshMonitorAppearance(
+    monitorActor: MonitorLayerRecord,
+    state: MonitorParticleState,
+    target: ParticleTarget,
+    refreshStyle: boolean,
+  ): void {
+    const actor = monitorActor.actor;
+    if (!actor || actor._weatherDestroyed) return;
 
     for (let index = state.particles.length - 1; index >= 0; index--) {
       const particle = state.particles[index];
@@ -236,19 +268,22 @@ export class ParticleManager {
         continue;
       }
 
-      if (!this.isCorrectType(particle, target.type)) {
+      if (!this.isCorrectActorClass(particle, target)) {
         const currentX = particle.x;
         const currentY = particle.y;
 
         this.retireParticle(state, particle);
 
-        if (!state.target) continue;
+        if (
+          this.monitorStates.get(monitorActor) !== state ||
+          state.target !== target ||
+          monitorActor.actor !== actor ||
+          actor._weatherDestroyed
+        ) {
+          continue;
+        }
 
-        const replacement = this.createParticle(
-          monitorActor,
-          state,
-          target.type,
-        );
+        const replacement = this.createParticle(monitorActor, state, target);
         if (!replacement) continue;
 
         replacement.x = currentX;
@@ -258,59 +293,48 @@ export class ParticleManager {
         continue;
       }
 
-      if (refreshStyle) this.updateParticleStyle(particle, target.type);
+      if (refreshStyle) this.updateParticleStyle(particle, target);
     }
   }
 
   private createParticle(
     monitorActor: MonitorLayerRecord,
     state: MonitorParticleState,
-    type: EffectType,
+    target: ParticleTargetValues,
   ): ParticleActor | null {
     const actor = monitorActor.actor;
     if (!this.settings || !actor || actor._weatherDestroyed) {
       return null;
     }
 
-    const size = this.settings.get_int("particle-size");
-    const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
-    const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();
     const x = Math.random() * Math.max(1, monitorActor.monitor.width);
 
     let particle: ParticleActor;
-    if (type === "snow") {
-      if (snowEmoji) {
+    if (target.type === "snow") {
+      if (target.emoji !== null) {
         particle = new St.Label({
-          text: snowEmoji,
-          style: `font-size: ${size}px; color: ${this.settings.get_string(
-            "snow-color",
-          )};`,
+          text: target.emoji,
+          style: `font-size: ${target.size}px; color: ${target.color};`,
           x,
           y: -20,
         }) as ParticleActor;
       } else {
         particle = new St.Widget({
-          style: `background-color: ${this.settings.get_string(
-            "snow-color",
-          )}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`,
+          style: `background-color: ${target.color}; width: ${target.size}px; height: ${target.size}px; border-radius: ${target.size}px;`,
           x,
           y: -20,
         }) as ParticleActor;
       }
-    } else if (rainEmoji) {
+    } else if (target.emoji !== null) {
       particle = new St.Label({
-        text: rainEmoji,
-        style: `font-size: ${size}px; color: ${this.settings.get_string(
-          "rain-color",
-        )};`,
+        text: target.emoji,
+        style: `font-size: ${target.size}px; color: ${target.color};`,
         x,
         y: -20,
       }) as ParticleActor;
     } else {
       particle = new St.Widget({
-        style: `background-color: ${this.settings.get_string(
-          "rain-color",
-        )}; width: ${size / 2}px; height: ${size * 2}px;`,
+        style: `background-color: ${target.color}; width: ${target.size / 2}px; height: ${target.size * 2}px;`,
         x,
         y: -20,
       }) as ParticleActor;
@@ -416,51 +440,49 @@ export class ParticleManager {
     particle.destroy();
   }
 
-  private updateParticleStyle(particle: ParticleActor, type: EffectType): void {
+  private updateParticleStyle(
+    particle: ParticleActor,
+    target: ParticleTargetValues,
+  ): void {
     if (!this.settings || particle._weatherDestroyed) return;
 
-    const size = this.settings.get_int("particle-size");
-    const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
-    const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();
-
-    if (type === "snow") {
-      if (snowEmoji && particle instanceof St.Label) {
-        particle.text = snowEmoji;
-        particle.style = `font-size: ${size}px; color: ${this.settings.get_string(
-          "snow-color",
-        )};`;
+    if (target.type === "snow") {
+      if (target.emoji !== null && particle instanceof St.Label) {
+        particle.text = target.emoji;
+        particle.style = `font-size: ${target.size}px; color: ${target.color};`;
       } else if (!(particle instanceof St.Label)) {
-        particle.style = `background-color: ${this.settings.get_string(
-          "snow-color",
-        )}; width: ${size}px; height: ${size}px; border-radius: ${size}px;`;
+        particle.style = `background-color: ${target.color}; width: ${target.size}px; height: ${target.size}px; border-radius: ${target.size}px;`;
       }
-    } else if (rainEmoji && particle instanceof St.Label) {
-      particle.text = rainEmoji;
-      particle.style = `font-size: ${size}px; color: ${this.settings.get_string(
-        "rain-color",
-      )};`;
+    } else if (target.emoji !== null && particle instanceof St.Label) {
+      particle.text = target.emoji;
+      particle.style = `font-size: ${target.size}px; color: ${target.color};`;
     } else if (!(particle instanceof St.Label)) {
-      particle.style = `background-color: ${this.settings.get_string(
-        "rain-color",
-      )}; width: ${size / 2}px; height: ${size * 2}px;`;
+      particle.style = `background-color: ${target.color}; width: ${target.size / 2}px; height: ${target.size * 2}px;`;
     }
   }
 
-  private isCorrectType(particle: ParticleActor, type: EffectType): boolean {
+  private isCorrectActorClass(
+    particle: ParticleActor,
+    target: ParticleTargetValues,
+  ): boolean {
     if (!this.settings || particle._weatherDestroyed) return false;
 
-    const snowEmoji = (this.settings.get_string("snow-emoji") || "").trim();
-    const rainEmoji = (this.settings.get_string("rain-emoji") || "").trim();
-
-    if (type === "snow") {
-      return snowEmoji
-        ? particle instanceof St.Label && particle.text === snowEmoji
-        : particle instanceof St.Widget && !(particle instanceof St.Label);
-    }
-
-    return rainEmoji
-      ? particle instanceof St.Label && particle.text === rainEmoji
+    return target.emoji !== null
+      ? particle instanceof St.Label
       : particle instanceof St.Widget && !(particle instanceof St.Label);
+  }
+
+  private hasAppearanceChanged(
+    previousTarget: ParticleTarget | null,
+    target: ParticleTarget,
+  ): boolean {
+    return (
+      previousTarget !== null &&
+      (previousTarget.type !== target.type ||
+        previousTarget.size !== target.size ||
+        previousTarget.emoji !== target.emoji ||
+        previousTarget.color !== target.color)
+    );
   }
 
   private getBaseDuration(speed: number): number {

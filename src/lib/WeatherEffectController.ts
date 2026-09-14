@@ -5,7 +5,18 @@ import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import { WeatherIndicator } from "./QuickSettings.js";
 import { MonitorManager } from "./MonitorManager.js";
 import { ObscurationManager } from "./ObscurationManager.js";
-import { ParticleManager, type EffectType } from "./ParticleManager.js";
+import {
+  ParticleManager,
+  type ParticleTargetValues,
+} from "./ParticleManager.js";
+import {
+  PARTICLE_PROFILES,
+  resolveActiveParticleProfile,
+  resolveParticleProfileId,
+  type ParticleEffectType,
+  type ParticleProfileCountKey,
+  type ParticleProfileSizeKey,
+} from "./ParticleProfiles.js";
 
 type DisplayMode = "wallpaper" | "screen";
 
@@ -144,13 +155,23 @@ export class WeatherEffectController {
       this,
     );
 
-    const reconcileParticles = () => {
-      if (!this._isEnabled) return;
-      this._reconcileParticles();
-    };
     this._settings.connectObject(
-      "changed::particle-count",
-      reconcileParticles,
+      "changed::snow-default-particle-count",
+      () => this._onProfileCountChanged("snow-default-particle-count"),
+      "changed::snow-emoji-particle-count",
+      () => this._onProfileCountChanged("snow-emoji-particle-count"),
+      "changed::rain-default-particle-count",
+      () => this._onProfileCountChanged("rain-default-particle-count"),
+      "changed::rain-emoji-particle-count",
+      () => this._onProfileCountChanged("rain-emoji-particle-count"),
+      "changed::snow-default-particle-size",
+      () => this._onProfileSizeChanged("snow-default-particle-size"),
+      "changed::snow-emoji-particle-size",
+      () => this._onProfileSizeChanged("snow-emoji-particle-size"),
+      "changed::rain-default-particle-size",
+      () => this._onProfileSizeChanged("rain-default-particle-size"),
+      "changed::rain-emoji-particle-size",
+      () => this._onProfileSizeChanged("rain-emoji-particle-size"),
       this,
     );
 
@@ -163,39 +184,20 @@ export class WeatherEffectController {
       this,
     );
 
-    const refreshParticleAppearance = () => {
-      if (!this._isEnabled) return;
-      this._particleManager?.refreshAppearance();
-    };
-    const refreshSnowAppearance = () => {
-      if (
-        !this._isEnabled ||
-        this._settings.get_string("effect-type") !== "snow"
-      )
-        return;
-      this._particleManager?.refreshAppearance();
-    };
-    const refreshRainAppearance = () => {
-      if (
-        !this._isEnabled ||
-        this._settings.get_string("effect-type") !== "rain"
-      )
-        return;
-      this._particleManager?.refreshAppearance();
-    };
     this._settings.connectObject(
       "changed::effect-type",
-      refreshParticleAppearance,
-      "changed::particle-size",
-      refreshParticleAppearance,
+      () => {
+        if (!this._isEnabled) return;
+        this._reconcileParticles();
+      },
       "changed::snow-color",
-      refreshSnowAppearance,
+      () => this._onEffectColorChanged("snow"),
       "changed::snow-emoji",
-      refreshSnowAppearance,
+      () => this._onEffectEmojiChanged("snow"),
       "changed::rain-color",
-      refreshRainAppearance,
+      () => this._onEffectColorChanged("rain"),
       "changed::rain-emoji",
-      refreshRainAppearance,
+      () => this._onEffectEmojiChanged("rain"),
       this,
     );
 
@@ -405,6 +407,54 @@ export class WeatherEffectController {
     this._grabDragTimeout = null;
   }
 
+  private _onProfileCountChanged(key: ParticleProfileCountKey) {
+    if (
+      !this._isEnabled ||
+      resolveActiveParticleProfile(this._settings).countKey !== key
+    ) {
+      return;
+    }
+
+    this._reconcileParticles();
+  }
+
+  private _onProfileSizeChanged(key: ParticleProfileSizeKey) {
+    if (
+      !this._isEnabled ||
+      resolveActiveParticleProfile(this._settings).sizeKey !== key
+    ) {
+      return;
+    }
+
+    this._refreshParticleAppearance();
+  }
+
+  private _onEffectEmojiChanged(effectType: ParticleEffectType) {
+    if (
+      !this._isEnabled ||
+      this._settings.get_string("effect-type") !== effectType
+    ) {
+      return;
+    }
+
+    this._reconcileParticles();
+  }
+
+  private _onEffectColorChanged(effectType: ParticleEffectType) {
+    if (
+      !this._isEnabled ||
+      this._settings.get_string("effect-type") !== effectType
+    ) {
+      return;
+    }
+
+    this._refreshParticleAppearance();
+  }
+
+  private _refreshParticleAppearance() {
+    this._particleManager?.refreshAppearance(this._readParticleTargetValues());
+  }
+
   private _disconnectAllHandlers() {
     this._settings.disconnectObject(this);
 
@@ -494,17 +544,35 @@ export class WeatherEffectController {
         overviewVisible,
       );
 
-    const type = this._settings.get_string("effect-type") as EffectType;
-    const count = this._settings.get_int("particle-count");
-    const speed = this._settings.get_int("speed");
+    const targetValues = this._readParticleTargetValues();
     const targets = runnableMonitorActors.map((monitorActor) => ({
       monitorActor,
-      type,
-      count,
-      speed,
+      ...targetValues,
     }));
 
     this._particleManager.reconcile(monitorActors, targets);
+  }
+
+  private _readParticleTargetValues(): ParticleTargetValues {
+    const type = this._settings.get_string(
+      "effect-type",
+    ) as ParticleEffectType;
+    const snowEmoji = this._settings.get_string("snow-emoji");
+    const rainEmoji = this._settings.get_string("rain-emoji");
+    const profile =
+      PARTICLE_PROFILES[
+        resolveParticleProfileId(type, snowEmoji, rainEmoji)
+      ];
+    const emoji = (type === "snow" ? snowEmoji : rainEmoji).trim();
+
+    return {
+      type,
+      count: this._settings.get_int(profile.countKey),
+      size: this._settings.get_int(profile.sizeKey),
+      speed: this._settings.get_int("speed"),
+      emoji: emoji === "" ? null : emoji,
+      color: this._settings.get_string(`${type}-color`),
+    };
   }
 
   private _recomputeObscuration() {

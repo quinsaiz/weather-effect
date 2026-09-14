@@ -39,7 +39,7 @@ Enjoy the magic of falling snowflakes or raindrops on your GNOME desktop!
   - **Screen Mode**: Places particles above application windows and Overview, but below protected Shell UI such as the panel, screen shield, dialogs, keyboard, and screenshot UI. Particles remain visible in Overview; when **Pause on Fullscreen** is enabled, only fullscreen-covered monitors pause.
 - **Customizable Settings**:
   - Particles per runnable monitor: 5–50
-  - Particle size (4–32 pixels)
+  - Particle size (4–64 pixels)
   - Speed control (Ultra Slow, Slow, Medium, Fast)
   - Color customization for snow and rain
   - Preinstalled emojis support
@@ -48,6 +48,8 @@ Enjoy the magic of falling snowflakes or raindrops on your GNOME desktop!
 - **Quick Settings Integration**: Easy access through GNOME Quick Settings menu
 
 Particle count is per runnable monitor: a count of 5 with three runnable monitors means 5 particles on each monitor. If one monitor is blocked, its particles are not redistributed to the others.
+
+Snow Default, Snow Emoji, Rain Default, and Rain Emoji each retain independent particle count and size values. Switching effect or switching between a default shape and emoji restores the saved values for that profile.
 
 ## Installation
 
@@ -209,7 +211,7 @@ The extension can be configured through the GNOME Extensions app settings:
 - **Effect Type**: Snow or Rain
 - **Display Mode**: Wallpaper or Screen
 - **Particles per runnable monitor**: 5–50
-- **Particle Size**: 4 to 32 pixels
+- **Particle Size**: 4 to 64 pixels
 - **Speed**: Ultra Slow, Slow, Medium, or Fast
 - **Pause on Fullscreen**: Pause screen-mode particles on fullscreen-covered monitors
 - **Show in Quick Settings**: Show or hide the Weather Effect Quick Settings integration

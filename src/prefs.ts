@@ -3,7 +3,12 @@ import Gio from "gi://Gio";
 import Gtk from "gi://Gtk";
 import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 
-import { migrateLegacyParticleProfile } from "./lib/ParticleProfiles.js";
+import {
+  migrateLegacyParticleProfile,
+  resolveActiveParticleProfile,
+  type ParticleProfileCountKey,
+  type ParticleProfileSizeKey,
+} from "./lib/ParticleProfiles.js";
 
 export default class WeatherEffectPrefs extends ExtensionPreferences {
   fillPreferencesWindow(window: Adw.PreferencesWindow): Promise<void> {
@@ -118,25 +123,110 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
       title: "Particles per monitor",
       subtitle: "Number of particles shown on each monitor",
     });
-    this._bindNumberRow({
-      settings,
-      row: particleCountRow,
-      key: "particle-count",
-      range: [5, 50, 5],
+    particleCountRow.adjustment = new Gtk.Adjustment({
+      lower: 5,
+      upper: 50,
+      step_increment: 5,
     });
     particlesGroup.add(particleCountRow);
 
     const particleSizeRow = new Adw.SpinRow({
       title: "Particle Size",
-      subtitle: "Size of falling particles in pixels (4-32)",
+      subtitle: "Size of falling particles in pixels (4-64)",
     });
-    this._bindNumberRow({
-      settings,
-      row: particleSizeRow,
-      key: "particle-size",
-      range: [4, 32, 4],
+    particleSizeRow.adjustment = new Gtk.Adjustment({
+      lower: 4,
+      upper: 64,
+      step_increment: 4,
     });
     particlesGroup.add(particleSizeRow);
+
+    let presentingParticleProfile = false;
+    const presentParticleProfile = () => {
+      const profile = resolveActiveParticleProfile(settings);
+      const count = settings.get_int(profile.countKey);
+      const size = settings.get_int(profile.sizeKey);
+
+      presentingParticleProfile = true;
+      try {
+        if (particleCountRow.value !== count) particleCountRow.value = count;
+        if (particleSizeRow.value !== size) particleSizeRow.value = size;
+      } finally {
+        presentingParticleProfile = false;
+      }
+    };
+    const presentParticleCount = (key: ParticleProfileCountKey) => {
+      if (resolveActiveParticleProfile(settings).countKey !== key) return;
+
+      const count = settings.get_int(key);
+      if (particleCountRow.value === count) return;
+
+      presentingParticleProfile = true;
+      try {
+        particleCountRow.value = count;
+      } finally {
+        presentingParticleProfile = false;
+      }
+    };
+    const presentParticleSize = (key: ParticleProfileSizeKey) => {
+      if (resolveActiveParticleProfile(settings).sizeKey !== key) return;
+
+      const size = settings.get_int(key);
+      if (particleSizeRow.value === size) return;
+
+      presentingParticleProfile = true;
+      try {
+        particleSizeRow.value = size;
+      } finally {
+        presentingParticleProfile = false;
+      }
+    };
+
+    particleCountRow.connect("notify::value", () => {
+      if (presentingParticleProfile) return;
+
+      const key = resolveActiveParticleProfile(settings).countKey;
+      if (settings.get_int(key) !== particleCountRow.value)
+        settings.set_int(key, particleCountRow.value);
+    });
+    particleSizeRow.connect("notify::value", () => {
+      if (presentingParticleProfile) return;
+
+      const key = resolveActiveParticleProfile(settings).sizeKey;
+      if (settings.get_int(key) !== particleSizeRow.value)
+        settings.set_int(key, particleSizeRow.value);
+    });
+
+    presentParticleProfile();
+    mappedSettingsHandlers.push(
+      settings.connect("changed::effect-type", presentParticleProfile),
+      settings.connect("changed::snow-emoji", presentParticleProfile),
+      settings.connect("changed::rain-emoji", presentParticleProfile),
+      settings.connect("changed::snow-default-particle-count", () =>
+        presentParticleCount("snow-default-particle-count"),
+      ),
+      settings.connect("changed::snow-emoji-particle-count", () =>
+        presentParticleCount("snow-emoji-particle-count"),
+      ),
+      settings.connect("changed::rain-default-particle-count", () =>
+        presentParticleCount("rain-default-particle-count"),
+      ),
+      settings.connect("changed::rain-emoji-particle-count", () =>
+        presentParticleCount("rain-emoji-particle-count"),
+      ),
+      settings.connect("changed::snow-default-particle-size", () =>
+        presentParticleSize("snow-default-particle-size"),
+      ),
+      settings.connect("changed::snow-emoji-particle-size", () =>
+        presentParticleSize("snow-emoji-particle-size"),
+      ),
+      settings.connect("changed::rain-default-particle-size", () =>
+        presentParticleSize("rain-default-particle-size"),
+      ),
+      settings.connect("changed::rain-emoji-particle-size", () =>
+        presentParticleSize("rain-emoji-particle-size"),
+      ),
+    );
 
     const speedRow = new Adw.ComboRow({
       title: "Speed",
@@ -263,24 +353,5 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
     window.connect("destroy", disconnectMappedSettingsHandlers);
 
     return Promise.resolve();
-  }
-
-  private _bindNumberRow({
-    settings,
-    row,
-    key,
-    range,
-  }: {
-    settings: Gio.Settings;
-    row: Adw.SpinRow;
-    key: string;
-    range: [number, number, number];
-  }) {
-    row.adjustment = new Gtk.Adjustment({
-      lower: range[0],
-      upper: range[1],
-      step_increment: range[2],
-    });
-    settings.bind(key, row, "value", Gio.SettingsBindFlags.DEFAULT);
   }
 }
