@@ -2,7 +2,7 @@ import type Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
-import { WeatherIndicator } from "./UIManager.js";
+import { WeatherIndicator } from "./QuickSettings.js";
 import { MonitorManager } from "./MonitorManager.js";
 import { ObscurationManager } from "./ObscurationManager.js";
 import { ParticleManager, type EffectType } from "./ParticleManager.js";

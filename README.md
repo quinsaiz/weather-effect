@@ -177,7 +177,7 @@ weather-effect/
 │   │   ├── MonitorManager.ts       # Monitor detection and overlay actor placement
 │   │   ├── ObscurationManager.ts   # Active window occlusion and visibility tracking
 │   │   ├── ParticleManager.ts      # Particle lifecycle, physics, and canvas rendering
-│   │   ├── UIManager.ts            # Quick Settings panel Integration and UI components
+│   │   ├── QuickSettings.ts        # Quick Settings toggle and indicator components
 │   │   └── WeatherEffectController.ts # Core orchestrator binding components and weather events
 │   └── schemas/
 │       └── org.gnome.shell.extensions.weather-effect.gschema.xml # GSettings schema definition

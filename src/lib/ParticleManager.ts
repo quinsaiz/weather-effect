@@ -2,7 +2,7 @@ import Clutter from "gi://Clutter";
 import type Gio from "gi://Gio";
 import St from "gi://St";
 
-import type { MonitorActor } from "./MonitorManager.js";
+import type { MonitorLayerRecord } from "./MonitorManager.js";
 
 export type EffectType = "snow" | "rain";
 
@@ -11,7 +11,7 @@ type ParticleActor = St.Widget & {
 };
 
 export interface ParticleTarget {
-  monitorActor: MonitorActor;
+  monitorActor: MonitorLayerRecord;
   type: EffectType;
   count: number;
   speed: number;
@@ -28,14 +28,14 @@ interface MonitorParticleState {
  */
 export class ParticleManager {
   private settings: Gio.Settings | null;
-  private monitorStates: Map<MonitorActor, MonitorParticleState> = new Map();
+  private monitorStates: Map<MonitorLayerRecord, MonitorParticleState> = new Map();
 
   constructor(settings: Gio.Settings) {
     this.settings = settings;
   }
 
   reconcile(
-    liveMonitorActors: readonly MonitorActor[],
+    liveMonitorActors: readonly MonitorLayerRecord[],
     targets: readonly ParticleTarget[],
   ): void {
     if (!this.settings) return;
@@ -119,7 +119,7 @@ export class ParticleManager {
   }
 
   private ensureMonitorState(
-    monitorActor: MonitorActor,
+    monitorActor: MonitorLayerRecord,
   ): MonitorParticleState | null {
     const existingState = this.monitorStates.get(monitorActor);
     if (existingState) return existingState;
@@ -144,7 +144,7 @@ export class ParticleManager {
   }
 
   private retireMonitorState(
-    monitorActor: MonitorActor,
+    monitorActor: MonitorLayerRecord,
     state: MonitorParticleState,
   ): void {
     state.target = null;
@@ -164,7 +164,7 @@ export class ParticleManager {
   }
 
   private reconcileMonitorState(
-    monitorActor: MonitorActor,
+    monitorActor: MonitorLayerRecord,
     state: MonitorParticleState,
     target: ParticleTarget,
     refreshStyle = false,
@@ -221,7 +221,7 @@ export class ParticleManager {
   }
 
   private createParticle(
-    monitorActor: MonitorActor,
+    monitorActor: MonitorLayerRecord,
     state: MonitorParticleState,
     type: EffectType,
   ): ParticleActor | null {
@@ -285,7 +285,7 @@ export class ParticleManager {
   }
 
   private animateParticle(
-    monitorActor: MonitorActor,
+    monitorActor: MonitorLayerRecord,
     state: MonitorParticleState,
     particle: ParticleActor,
     speed: number,
@@ -299,9 +299,9 @@ export class ParticleManager {
       return;
     }
 
-    const screenHeight = Math.max(1, monitorActor.monitor.height);
+    const monitorHeight = Math.max(1, monitorActor.monitor.height);
     const baseDuration = this.getBaseDuration(speed);
-    const targetY = screenHeight + 20;
+    const targetY = monitorHeight + 20;
     const totalDistance = targetY + 20;
     const distanceToTravel = Math.max(1, targetY - particle.y);
     const duration =
@@ -320,7 +320,7 @@ export class ParticleManager {
   }
 
   private handleTransitionComplete(
-    monitorActor: MonitorActor,
+    monitorActor: MonitorLayerRecord,
     state: MonitorParticleState,
     particle: ParticleActor,
   ): void {

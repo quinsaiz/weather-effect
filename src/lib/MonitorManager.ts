@@ -7,7 +7,7 @@ export type MonitorLayerActor = Clutter.Actor & {
   _weatherDestroyed: boolean;
 };
 
-export interface MonitorActor {
+export interface MonitorLayerRecord {
   actor: MonitorLayerActor | null;
   monitor: ShellMonitor;
 }
@@ -16,7 +16,7 @@ export interface MonitorActor {
  * Manage monitors and their actors
  */
 export class MonitorManager {
-  private monitorActors: MonitorActor[] = [];
+  private monitorActors: MonitorLayerRecord[] = [];
   private settings: Gio.Settings | null;
   private uiGroup: Clutter.Actor | null = null;
   private uiGroupDestroyId: number | null = null;
@@ -98,7 +98,7 @@ export class MonitorManager {
   /**
    * Create actors for all monitors
    */
-  createMonitorActors(): MonitorActor[] {
+  createMonitorActors(): MonitorLayerRecord[] {
     if (!this.hasAvailableContainer()) {
       this.monitorActors = [];
       return this.monitorActors;
@@ -197,7 +197,7 @@ export class MonitorManager {
     return true;
   }
 
-  rebuildMonitorActors(): MonitorActor[] {
+  rebuildMonitorActors(): MonitorLayerRecord[] {
     this.destroyMonitorActors();
     return this.createMonitorActors();
   }
@@ -227,7 +227,7 @@ export class MonitorManager {
     }
   }
 
-  private createMonitorActor(monitor: ShellMonitor): MonitorActor {
+  private createMonitorActor(monitor: ShellMonitor): MonitorLayerRecord {
     const actor = new Clutter.Actor({
       width: monitor.width,
       height: monitor.height,
@@ -236,7 +236,7 @@ export class MonitorManager {
       x: monitor.x,
       y: monitor.y,
     }) as MonitorLayerActor;
-    const monitorActor: MonitorActor = { actor, monitor };
+    const monitorActor: MonitorLayerRecord = { actor, monitor };
 
     actor._weatherDestroyed = false;
     actor.connect("destroy", (destroyedActor) => {
@@ -282,7 +282,7 @@ export class MonitorManager {
   /**
    * Get all monitor actors
    */
-  getMonitorActors(): MonitorActor[] {
+  getMonitorActors(): MonitorLayerRecord[] {
     return this.monitorActors;
   }
 }

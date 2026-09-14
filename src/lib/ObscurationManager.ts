@@ -1,7 +1,7 @@
 import type Gio from "gi://Gio";
 import Meta from "gi://Meta";
 
-import type { MonitorActor, ShellMonitor } from "./MonitorManager.js";
+import type { MonitorLayerRecord, ShellMonitor } from "./MonitorManager.js";
 
 type DisplayMode = "wallpaper" | "screen";
 type CoverageRectangle = {
@@ -27,9 +27,9 @@ export class ObscurationManager {
    * Get the current monitor actors that may render particles.
    */
   getRunnableMonitorActors(
-    monitorActors: MonitorActor[],
+    monitorActors: MonitorLayerRecord[],
     isOverviewVisible: boolean,
-  ): MonitorActor[] {
+  ): MonitorLayerRecord[] {
     if (!this.settings.get_boolean("active")) return [];
 
     const currentMonitorActors = monitorActors.filter(
@@ -46,7 +46,7 @@ export class ObscurationManager {
 
       return currentMonitorActors.filter(
         (monitorActor) =>
-          !this.isMonitorFullscreenCovered(monitorActor.monitor.index),
+          !this.isCachedFullscreenCovered(monitorActor.monitor.index),
       );
     }
 
@@ -88,7 +88,7 @@ export class ObscurationManager {
     this.fullscreenCoveredMonitorIndexes = fullscreenCoveredMonitorIndexes;
   }
 
-  isMonitorFullscreenCovered(monitorIndex: number): boolean {
+  isCachedFullscreenCovered(monitorIndex: number): boolean {
     return this.fullscreenCoveredMonitorIndexes.has(monitorIndex);
   }
 
@@ -99,7 +99,7 @@ export class ObscurationManager {
   /**
    * Recompute obscuration for all monitors
    */
-  recomputeObscuration(monitorActors: MonitorActor[]) {
+  recomputeObscuration(monitorActors: MonitorLayerRecord[]) {
     const mode = this.settings.get_string("display-mode") as DisplayMode;
 
     if (mode === "screen") {
