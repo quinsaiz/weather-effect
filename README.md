@@ -35,23 +35,27 @@ Enjoy the magic of falling snowflakes or raindrops on your GNOME desktop!
 - ❄️ **Snow Effect**: Beautiful animated snowflakes falling on your desktop
 - 🌧️ **Rain Effect**: Realistic rain animation with customizable particles
 - **Display Modes**:
-  - **Wallpaper Mode**: Effects only on desktop wallpaper background
-  - **Screen Mode**: Full-screen overlay that works even in overview
+  - **Wallpaper Mode**: Places particles with the wallpaper/background layer. Particles pause per monitor while Overview is visible or when non-minimized normal windows on the active workspace cover at least 95% of that monitor by union area.
+  - **Screen Mode**: Places particles above application windows and Overview, but below protected Shell UI such as the panel, screen shield, dialogs, keyboard, and screenshot UI. Particles remain visible in Overview; when **Pause on Fullscreen** is enabled, only fullscreen-covered monitors pause.
 - **Customizable Settings**:
-  - Particles per monitor: 5–50
+  - Particles per runnable monitor: 5–50
   - Particle size (4–32 pixels)
-  - Speed control (Slow, Medium, Fast)
+  - Speed control (Ultra Slow, Slow, Medium, Fast)
   - Color customization for snow and rain
   - Preinstalled emojis support
+- **Particle Rendering**: Each particle is an individual `St.Widget` or `St.Label` animated with a linear Clutter transition
 - **Multi-Monitor Support**: Automatically works across all connected monitors
-- **Smart Behavior**: Pauses when desktop is obscured by fullscreen windows
+- **Pause on Fullscreen**: Optionally pauses screen-mode particles on fullscreen-covered monitors
+- **Show in Quick Settings**: Shows or hides the Weather Effect toggle and indicator
 - **Quick Settings Integration**: Easy access through GNOME Quick Settings menu
+
+Particle count is per runnable monitor: a count of 5 with three runnable monitors means 5 particles on each monitor. If one monitor is blocked, its particles are not redistributed to the others.
 
 ## Installation
 
 ### Prerequisites
 
-- GNOME Shell 45+
+- GNOME Shell 45 through 50
 
 ### From GNOME Extensions
 
@@ -112,6 +116,22 @@ If you want to build the extension from source code, follow these steps:
    - Validate metadata, the settings schema, shell scripts, and TypeScript
    - Compile TypeScript files to JavaScript
    - Create and validate `build/weather-effect@quinsaiz.github.shell-extension.zip`
+
+   `npm run build` already runs source validation and validates the resulting
+   extension package.
+
+   To validate metadata, the settings schema, shell scripts, and TypeScript
+   without building:
+
+   ```bash
+   npm run validate
+   ```
+
+   To validate the already-built extension archive without rebuilding it:
+
+   ```bash
+   npm run validate:package
+   ```
 
 4. **Build and install the extension locally (optional):**
 
@@ -174,9 +194,9 @@ weather-effect/
 │   ├── metadata.json               # Extension manifest for GNOME Shell
 │   ├── prefs.ts                    # Extension settings window entry point
 │   ├── lib/
-│   │   ├── MonitorManager.ts       # Monitor detection and overlay actor placement
+│   │   ├── MonitorManager.ts       # MonitorLayerRecord lifecycle and layer actor placement
 │   │   ├── ObscurationManager.ts   # Active window occlusion and visibility tracking
-│   │   ├── ParticleManager.ts      # Particle lifecycle, physics, and canvas rendering
+│   │   ├── ParticleManager.ts      # Particle actor lifecycle and Clutter transitions
 │   │   ├── QuickSettings.ts        # Quick Settings toggle and indicator components
 │   │   └── WeatherEffectController.ts # Core orchestrator binding components and weather events
 │   └── schemas/
@@ -189,10 +209,12 @@ weather-effect/
 The extension can be configured through the GNOME Extensions app settings:
 
 - **Effect Type**: Snow or Rain
-- **Display Mode**: Wallpaper only or Full screen overlay
-- **Particles per monitor**: 5–50
+- **Display Mode**: Wallpaper or Screen
+- **Particles per runnable monitor**: 5–50
 - **Particle Size**: 4 to 32 pixels
-- **Speed**: Slow, Medium, or Fast
+- **Speed**: Ultra Slow, Slow, Medium, or Fast
+- **Pause on Fullscreen**: Pause screen-mode particles on fullscreen-covered monitors
+- **Show in Quick Settings**: Show or hide the Weather Effect toggle and indicator
 - **Snow Color**: White, Light Blue, or Silver
 - **Rain Color**: Gray or Dark Blue
 - **Custom Emojis**: Choose emoji or use default shapes

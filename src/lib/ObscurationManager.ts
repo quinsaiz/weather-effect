@@ -11,11 +11,10 @@ type CoverageRectangle = {
   y2: number;
 };
 
-/**
- * Detect whether a monitor is obscured by windows
- */
+/** Caches per-monitor wallpaper obscuration and screen-mode fullscreen state. */
 export class ObscurationManager {
   private monitorObscuredCache: Map<number, boolean> = new Map();
+  // Window/display events refresh this Set before particle reconciliation reads it.
   private fullscreenCoveredMonitorIndexes: Set<number> = new Set();
   private settings: Gio.Settings;
 
@@ -23,9 +22,6 @@ export class ObscurationManager {
     this.settings = settings;
   }
 
-  /**
-   * Get the current monitor actors that may render particles.
-   */
   getRunnableMonitorActors(
     monitorActors: MonitorLayerRecord[],
     isOverviewVisible: boolean,
@@ -96,9 +92,6 @@ export class ObscurationManager {
     this.fullscreenCoveredMonitorIndexes.clear();
   }
 
-  /**
-   * Recompute obscuration for all monitors
-   */
   recomputeObscuration(monitorActors: MonitorLayerRecord[]) {
     const mode = this.settings.get_string("display-mode") as DisplayMode;
 
@@ -107,6 +100,7 @@ export class ObscurationManager {
       return;
     }
 
+    // Coverage uses full monitor bounds rather than panel-excluding work areas.
     const monitorCoverage = new Map<
       number,
       {
@@ -174,6 +168,7 @@ export class ObscurationManager {
     for (const coverage of monitorCoverage.values()) {
       const monitor = coverage.monitor;
       const area = monitor.width * monitor.height;
+      // Overlapping qualifying windows count once toward the 95% threshold.
       const nowObscured =
         coverage.hasFullscreen ||
         (coverage.rectangles.length > 0 &&
@@ -182,17 +177,12 @@ export class ObscurationManager {
     }
   }
 
-  /**
-   * Clear the obscuration cache
-   */
   clear() {
     this.monitorObscuredCache.clear();
     this.clearFullscreenState();
   }
 
-  /**
-   * Compute union area of rectangles
-   */
+  /** Compute area without double-counting overlapping rectangles. */
   private _rectUnionArea(
     rects: CoverageRectangle[],
   ): number {

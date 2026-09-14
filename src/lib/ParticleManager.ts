@@ -7,6 +7,7 @@ import type { MonitorLayerRecord } from "./MonitorManager.js";
 export type EffectType = "snow" | "rain";
 
 type ParticleActor = St.Widget & {
+  // Shell container destruction can precede manager cleanup.
   _weatherDestroyed?: boolean;
 };
 
@@ -324,6 +325,7 @@ export class ParticleManager {
     state: MonitorParticleState,
     particle: ParticleActor,
   ): void {
+    // Completion can arrive after retirement or monitor-layer replacement.
     if (
       !this.settings ||
       this.monitorStates.get(monitorActor) !== state ||
@@ -365,6 +367,7 @@ export class ParticleManager {
     state: MonitorParticleState,
     particle: ParticleActor,
   ): void {
+    // Release collection ownership before native destruction emits destroy.
     const index = state.particles.indexOf(particle);
     if (index !== -1) state.particles.splice(index, 1);
 

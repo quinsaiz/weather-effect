@@ -10,8 +10,7 @@ import { ParticleManager, type EffectType } from "./ParticleManager.js";
 type DisplayMode = "wallpaper" | "screen";
 
 /**
- * Main controller for the extension.
- * Coordinates different managers and safely handles GNOME Shell lifecycle.
+ * Coordinates settings, Shell events, monitor layers, particles, and Quick Settings.
  */
 export class WeatherEffectController {
   private readonly _settings: Gio.Settings;
@@ -21,7 +20,7 @@ export class WeatherEffectController {
   private _particleManager: ParticleManager | null = null;
   private _isEnabled: boolean = false;
 
-  // Centralized timeout tracking to prevent memory leaks
+  // Every GLib source is owned here so disable can remove it before manager teardown.
   private _timeouts: Set<number> = new Set();
   private _debounceTimeout: number | null = null;
   private _fullscreenRefreshPending: boolean = false;
@@ -31,10 +30,6 @@ export class WeatherEffectController {
     this._settings = settings;
   }
 
-  /**
-   * Helper method to create a GLib timeout and automatically track its ID
-   * in the _timeouts set for clean removal upon disabling.
-   */
   private _addTimeout(
     priority: number,
     interval: number,
@@ -52,9 +47,6 @@ export class WeatherEffectController {
     return id;
   }
 
-  /**
-   * Remove a specific tracked timeout safely.
-   */
   private _removeTimeout(id: number | null): null {
     if (id !== null && this._timeouts.has(id)) {
       GLib.source_remove(id);
@@ -63,37 +55,27 @@ export class WeatherEffectController {
     return null;
   }
 
-  /**
-   * Enable the extension.
-   */
   enable() {
     this._isEnabled = true;
 
-    // Initialize managers
     this._monitorManager = new MonitorManager(this._settings);
     this._obscurationManager = new ObscurationManager(this._settings);
     this._particleManager = new ParticleManager(this._settings);
 
-    // Create UI if configured
     if (this._settings.get_boolean("show-in-quick-settings")) {
       this._createIndicator();
     }
 
-    // Create monitor actors
     this._monitorManager.createMonitorActors();
     this._obscurationManager.recomputeObscuration(
       this._monitorManager.getMonitorActors(),
     );
 
-    // Set up event handlers using connectObject
     this._setupEventHandlers();
 
     this._refreshFullscreenStateAndReconcile();
   }
 
-  /**
-   * Disable the extension.
-   */
   disable() {
     this._isEnabled = false;
 
@@ -103,9 +85,6 @@ export class WeatherEffectController {
     this._destroyUIAndManagers();
   }
 
-  /**
-   * Create the Quick Settings indicator.
-   */
   private _createIndicator() {
     if (this._indicator) return;
 
@@ -117,9 +96,6 @@ export class WeatherEffectController {
     );
   }
 
-  /**
-   * Destroy the Quick Settings indicator.
-   */
   private _destroyIndicator() {
     if (this._indicator) {
       this._indicator.destroy();
@@ -127,9 +103,6 @@ export class WeatherEffectController {
     }
   }
 
-  /**
-   * Handle show-in-quick-settings setting change.
-   */
   private _onShowInQuickSettingsChanged() {
     const show = this._settings.get_boolean("show-in-quick-settings");
 
@@ -140,9 +113,6 @@ export class WeatherEffectController {
     }
   }
 
-  /**
-   * Set up all event handlers using GNOME's connectObject pattern.
-   */
   private _setupEventHandlers() {
     // Overview events
     Main.overview.connectObject(
@@ -268,6 +238,7 @@ export class WeatherEffectController {
     global.display.connectObject(
       "workareas-changed",
       () => {
+        // Logout can remove Shell containers before this signal is delivered.
         if (!this._isEnabled) return;
         if (!this._monitorManager?.updateMonitorActors()) {
           this._particleManager?.clearAll();
@@ -416,9 +387,6 @@ export class WeatherEffectController {
     );
   }
 
-  /**
-   * Stop and clear all tracked timeouts.
-   */
   private _stopAllTimeouts() {
     this._timeouts.forEach((id) => GLib.source_remove(id));
     this._timeouts.clear();
@@ -428,9 +396,6 @@ export class WeatherEffectController {
     this._grabDragTimeout = null;
   }
 
-  /**
-   * Disconnect all handlers automatically by target object.
-   */
   private _disconnectAllHandlers() {
     this._settings.disconnectObject(this);
 
@@ -441,9 +406,6 @@ export class WeatherEffectController {
     global.window_manager.disconnectObject(this);
   }
 
-  /**
-   * Destroy UI components and managers.
-   */
   private _destroyUIAndManagers() {
     this._destroyIndicator();
 
@@ -461,9 +423,6 @@ export class WeatherEffectController {
     this._particleManager = null;
   }
 
-  /**
-   * Debounced recompute of obscuration.
-   */
   private _debouncedRecompute(refreshFullscreenState = false) {
     if (!this._monitorManager?.hasAvailableContainer()) return;
 
@@ -503,9 +462,6 @@ export class WeatherEffectController {
     this._reconcileParticles();
   }
 
-  /**
-   * Reconcile particles with current monitor state.
-   */
   private _reconcileParticles(isOverviewVisible?: boolean) {
     if (
       !this._isEnabled ||
@@ -542,9 +498,6 @@ export class WeatherEffectController {
     this._particleManager.reconcile(monitorActors, targets);
   }
 
-  /**
-   * Recompute obscuration for all active monitors.
-   */
   private _recomputeObscuration() {
     if (
       !this._isEnabled ||

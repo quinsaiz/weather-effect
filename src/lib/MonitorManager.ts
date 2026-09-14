@@ -4,6 +4,7 @@ import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
 export type ShellMonitor = (typeof Main.layoutManager.monitors)[number];
 export type MonitorLayerActor = Clutter.Actor & {
+  // Shell may destroy native actors before extension teardown reaches them.
   _weatherDestroyed: boolean;
 };
 
@@ -12,9 +13,7 @@ export interface MonitorLayerRecord {
   monitor: ShellMonitor;
 }
 
-/**
- * Manage monitors and their actors
- */
+/** Owns one clipped particle layer per monitor and its Shell-container attachment. */
 export class MonitorManager {
   private monitorActors: MonitorLayerRecord[] = [];
   private settings: Gio.Settings | null;
@@ -28,6 +27,7 @@ export class MonitorManager {
   constructor(settings: Gio.Settings) {
     this.settings = settings;
 
+    // Shell may destroy these containers before extension disable during logout.
     this.uiGroup = Main.layoutManager.uiGroup;
     if (this.uiGroup) {
       this.uiGroupDestroyId = this.uiGroup.connect("destroy", () => {
@@ -47,6 +47,7 @@ export class MonitorManager {
       );
     }
 
+    // Private GNOME Shell boundary used for wallpaper-layer placement.
     this.backgroundGroup =
       (
         Main.layoutManager as typeof Main.layoutManager & {
@@ -95,9 +96,6 @@ export class MonitorManager {
     return null;
   }
 
-  /**
-   * Create actors for all monitors
-   */
   createMonitorActors(): MonitorLayerRecord[] {
     if (!this.hasAvailableContainer()) {
       this.monitorActors = [];
@@ -116,9 +114,6 @@ export class MonitorManager {
     return this.monitorActors;
   }
 
-  /**
-   * Attach actors to the scene
-   */
   attachMonitorActors(): boolean {
     const targetContainer = this.getTargetContainer();
     if (!targetContainer) return false;
@@ -140,6 +135,7 @@ export class MonitorManager {
       if (parent) parent.remove_child(monitorActor.actor);
 
       if (screenShieldGroup) {
+        // Screen-mode layers stay below protected Shell UI in uiGroup.
         targetContainer.insert_child_below(
           monitorActor.actor,
           screenShieldGroup,
@@ -152,16 +148,12 @@ export class MonitorManager {
     return this.updateMonitorActors();
   }
 
-  /**
-   * Update actor sizes and positions
-   */
   updateMonitorActors(): boolean {
     if (!this.hasAvailableContainer()) return false;
 
     const monitors = Main.layoutManager.monitors;
     let needReattach = false;
 
-    // Remove actors for disconnected monitors
     for (let i = this.monitorActors.length - 1; i >= 0; i--) {
       const monitorActor = this.monitorActors[i];
 
@@ -182,7 +174,6 @@ export class MonitorManager {
       }
     }
 
-    // Add actors for new monitors
     for (const monitor of monitors) {
       const exists = this.monitorActors.find(
         (ma) => ma.monitor.x === monitor.x && ma.monitor.y === monitor.y,
@@ -202,9 +193,6 @@ export class MonitorManager {
     return this.createMonitorActors();
   }
 
-  /**
-   * Destroy all actors
-   */
   destroy() {
     this.destroyMonitorActors();
     this.disconnectShellContainerHandlers();
@@ -279,9 +267,6 @@ export class MonitorManager {
     this.backgroundGroup = null;
   }
 
-  /**
-   * Get all monitor actors
-   */
   getMonitorActors(): MonitorLayerRecord[] {
     return this.monitorActors;
   }

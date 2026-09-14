@@ -9,11 +9,10 @@ import {
 
 type EffectType = "snow" | "rain";
 
-/**
- * Quick Settings Toggle for selecting the effect
- */
+/** Quick Settings toggle bound to the active setting. */
 export const WeatherToggle = GObject.registerClass(
   class WeatherToggle extends QuickMenuToggle {
+    // Shell may destroy the toggle before indicator callbacks are disconnected.
     declare public _weatherDestroyed: boolean;
     private _settings: Gio.Settings | null;
     private _snowButton: St.Button | null = null;
@@ -164,9 +163,7 @@ export const WeatherToggle = GObject.registerClass(
   },
 );
 
-/**
- * System Indicator for showing status
- */
+/** Indicator reflecting the selected effect and active state. */
 export const WeatherIndicator = GObject.registerClass(
   class WeatherIndicator extends SystemIndicator {
     public toggle!: InstanceType<typeof WeatherToggle> | null;
