@@ -29,6 +29,11 @@
       <summary>Show in Quick Settings</summary>
       <description>Show the weather effect toggle button and icon in the Quick Settings panel.</description>
     </key>
+    <key name="show-panel-icon" type="b">
+      <default>true</default>
+      <summary>Show Panel Icon</summary>
+      <description>Show the weather icon in the top panel while keeping the Quick Settings tile available.</description>
+    </key>
     <key name="pause-on-fullscreen" type="b">
       <default>true</default>
       <summary>Pause on fullscreen</summary>

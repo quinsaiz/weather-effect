@@ -45,8 +45,6 @@ Enjoy the magic of falling snowflakes or raindrops on your GNOME desktop!
   - Preinstalled emojis support
 - **Particle Rendering**: Each particle is an individual `St.Widget` or `St.Label` animated with a linear Clutter transition
 - **Multi-Monitor Support**: Automatically works across all connected monitors
-- **Pause on Fullscreen**: Optionally pauses screen-mode particles on fullscreen-covered monitors
-- **Show in Quick Settings**: Shows or hides the Weather Effect toggle and indicator
 - **Quick Settings Integration**: Easy access through GNOME Quick Settings menu
 
 Particle count is per runnable monitor: a count of 5 with three runnable monitors means 5 particles on each monitor. If one monitor is blocked, its particles are not redistributed to the others.
@@ -214,7 +212,8 @@ The extension can be configured through the GNOME Extensions app settings:
 - **Particle Size**: 4 to 32 pixels
 - **Speed**: Ultra Slow, Slow, Medium, or Fast
 - **Pause on Fullscreen**: Pause screen-mode particles on fullscreen-covered monitors
-- **Show in Quick Settings**: Show or hide the Weather Effect toggle and indicator
+- **Show in Quick Settings**: Show or hide the Weather Effect Quick Settings integration
+- **Show Panel Icon**: Show or hide its top-panel icon without removing the Quick Settings tile
 - **Snow Color**: White, Light Blue, or Silver
 - **Rain Color**: Gray or Dark Blue
 - **Custom Emojis**: Choose emoji or use default shapes

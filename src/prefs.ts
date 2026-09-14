@@ -71,6 +71,24 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
     );
     generalGroup.add(quickSettingsRow);
 
+    const panelIconRow = new Adw.SwitchRow({
+      title: "Show Panel Icon",
+      subtitle: "Show the weather icon in the top panel",
+    });
+    settings.bind(
+      "show-panel-icon",
+      panelIconRow,
+      "active",
+      Gio.SettingsBindFlags.DEFAULT | Gio.SettingsBindFlags.NO_SENSITIVITY
+    );
+    settings.bind(
+      "show-in-quick-settings",
+      panelIconRow,
+      "sensitive",
+      Gio.SettingsBindFlags.GET | Gio.SettingsBindFlags.NO_SENSITIVITY
+    );
+    generalGroup.add(panelIconRow);
+
     const pauseRow = new Adw.SwitchRow({
       title: "Pause on Fullscreen",
       subtitle:

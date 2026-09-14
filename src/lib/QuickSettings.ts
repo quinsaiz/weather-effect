@@ -176,6 +176,12 @@ export const WeatherIndicator = GObject.registerClass(
       this._indicator = this._addIndicator();
       this._indicator.icon_name = "weather-snow-symbolic";
       this._settings = settings;
+      this._settings.bind(
+        "show-panel-icon",
+        this._indicator,
+        "visible",
+        Gio.SettingsBindFlags.GET | Gio.SettingsBindFlags.NO_SENSITIVITY,
+      );
 
       this.toggle = new (WeatherToggle as typeof WeatherToggle & {
         new (settings: Gio.Settings): InstanceType<typeof WeatherToggle>;
