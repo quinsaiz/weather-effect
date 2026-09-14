@@ -51,6 +51,59 @@
       <summary>Particle size</summary>
       <description>Size of falling particles in pixels (4 to 32).</description>
     </key>
+    <key name="snow-default-particle-count" type="i">
+      <default>20</default>
+      <range min="5" max="50"/>
+      <summary>Snow default-shape particles per monitor</summary>
+      <description>Number of default-shape snow particles shown on each monitor.</description>
+    </key>
+    <key name="snow-default-particle-size" type="i">
+      <default>8</default>
+      <range min="4" max="64"/>
+      <summary>Snow default-shape particle size</summary>
+      <description>Size in pixels of default-shape snow particles.</description>
+    </key>
+    <key name="snow-emoji-particle-count" type="i">
+      <default>10</default>
+      <range min="5" max="50"/>
+      <summary>Snow emoji particles per monitor</summary>
+      <description>Number of emoji snow particles shown on each monitor.</description>
+    </key>
+    <key name="snow-emoji-particle-size" type="i">
+      <default>32</default>
+      <range min="4" max="64"/>
+      <summary>Snow emoji particle size</summary>
+      <description>Font size in pixels of emoji snow particles.</description>
+    </key>
+    <key name="rain-default-particle-count" type="i">
+      <default>30</default>
+      <range min="5" max="50"/>
+      <summary>Rain default-shape particles per monitor</summary>
+      <description>Number of default-shape rain particles shown on each monitor.</description>
+    </key>
+    <key name="rain-default-particle-size" type="i">
+      <default>8</default>
+      <range min="4" max="64"/>
+      <summary>Rain default-shape particle size</summary>
+      <description>Size in pixels used to dimension default-shape rain particles.</description>
+    </key>
+    <key name="rain-emoji-particle-count" type="i">
+      <default>15</default>
+      <range min="5" max="50"/>
+      <summary>Rain emoji particles per monitor</summary>
+      <description>Number of emoji rain particles shown on each monitor.</description>
+    </key>
+    <key name="rain-emoji-particle-size" type="i">
+      <default>32</default>
+      <range min="4" max="64"/>
+      <summary>Rain emoji particle size</summary>
+      <description>Font size in pixels of emoji rain particles.</description>
+    </key>
+    <key name="particle-profile-migration-version" type="u">
+      <default>0</default>
+      <summary>Particle profile migration version</summary>
+      <description>Internal version marker for one-time particle-profile settings migration.</description>
+    </key>
     <key name="speed" type="i">
       <default>1</default>
       <range min="0" max="3"/>

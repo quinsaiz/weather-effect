@@ -63,6 +63,7 @@ PRODUCTION_MODULES=(
   "MonitorManager"
   "ObscurationManager"
   "ParticleManager"
+  "ParticleProfiles"
   "QuickSettings"
   "WeatherEffectController"
 )

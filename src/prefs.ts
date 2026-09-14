@@ -3,8 +3,11 @@ import Gio from "gi://Gio";
 import Gtk from "gi://Gtk";
 import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 
+import { migrateLegacyParticleProfile } from "./lib/ParticleProfiles.js";
+
 export default class WeatherEffectPrefs extends ExtensionPreferences {
   fillPreferencesWindow(window: Adw.PreferencesWindow): Promise<void> {
+    migrateLegacyParticleProfile(this.getSettings());
     const settings = this.getSettings();
     const mappedSettingsHandlers: number[] = [];
 
