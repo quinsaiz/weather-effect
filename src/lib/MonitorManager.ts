@@ -24,8 +24,6 @@ export class MonitorManager {
   private screenShieldGroupDestroyId: number | null = null;
   private backgroundGroup: Clutter.Actor | null = null;
   private backgroundGroupDestroyId: number | null = null;
-  private wallpaperUsesUiGroup = false;
-  private shellContainersAvailable = true;
 
   constructor(settings: Gio.Settings) {
     this.settings = settings;
@@ -33,12 +31,9 @@ export class MonitorManager {
     this.uiGroup = Main.layoutManager.uiGroup;
     if (this.uiGroup) {
       this.uiGroupDestroyId = this.uiGroup.connect("destroy", () => {
-        this.shellContainersAvailable = false;
         this.uiGroup = null;
         this.uiGroupDestroyId = null;
       });
-    } else {
-      this.shellContainersAvailable = false;
     }
 
     this.screenShieldGroup = Main.layoutManager.screenShieldGroup ?? null;
@@ -55,18 +50,14 @@ export class MonitorManager {
     this.backgroundGroup =
       (
         Main.layoutManager as typeof Main.layoutManager & {
-          backgroundGroup?: Clutter.Actor;
+          _backgroundGroup?: Clutter.Actor;
         }
-      ).backgroundGroup ??
-      Main.layoutManager._backgroundGroup ??
-      null;
-    this.wallpaperUsesUiGroup = !this.backgroundGroup;
+      )._backgroundGroup ?? null;
 
     if (this.backgroundGroup) {
       this.backgroundGroupDestroyId = this.backgroundGroup.connect(
         "destroy",
         () => {
-          this.shellContainersAvailable = false;
           this.backgroundGroup = null;
           this.backgroundGroupDestroyId = null;
         },
@@ -79,22 +70,29 @@ export class MonitorManager {
   }
 
   private getTargetContainer(): Clutter.Actor | null {
-    if (!this.settings || !this.shellContainersAvailable) return null;
+    if (!this.settings) return null;
 
     const mode = this.settings.get_string("display-mode") as
       | "screen"
       | "wallpaper";
 
-    if (mode === "wallpaper" && !this.wallpaperUsesUiGroup) {
+    if (mode === "wallpaper") {
+      if (
+        !this.backgroundGroup ||
+        this.backgroundGroup.get_parent() !== global.window_group
+      ) {
+        return null;
+      }
       return this.backgroundGroup;
     }
 
     if (mode === "screen") {
       if (!this.uiGroup || !this.screenShieldGroup) return null;
       if (this.screenShieldGroup.get_parent() !== this.uiGroup) return null;
+      return this.uiGroup;
     }
 
-    return this.uiGroup;
+    return null;
   }
 
   /**
@@ -210,7 +208,6 @@ export class MonitorManager {
   destroy() {
     this.destroyMonitorActors();
     this.disconnectShellContainerHandlers();
-    this.shellContainersAvailable = false;
     this.settings = null;
   }
 
