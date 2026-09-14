@@ -154,6 +154,15 @@ export class WeatherEffectController {
       this,
     );
 
+    this._settings.connectObject(
+      "changed::speed",
+      () => {
+        if (!this._isEnabled) return;
+        this._particleManager?.retimeSpeed();
+      },
+      this,
+    );
+
     const refreshParticleAppearance = () => {
       if (!this._isEnabled) return;
       this._particleManager?.refreshAppearance();

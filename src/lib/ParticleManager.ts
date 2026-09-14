@@ -92,6 +92,47 @@ export class ParticleManager {
     }
   }
 
+  retimeSpeed(): void {
+    if (!this.settings || !this.settings.get_boolean("active")) return;
+
+    const speed = this.settings.get_int("speed");
+    for (const [monitorActor, state] of this.monitorStates) {
+      const actor = monitorActor.actor;
+      const target = state.target;
+      if (!actor || actor._weatherDestroyed || !target) continue;
+
+      target.speed = speed;
+
+      for (const particle of [...state.particles]) {
+        if (
+          this.monitorStates.get(monitorActor) !== state ||
+          state.target !== target ||
+          monitorActor.actor !== actor ||
+          actor._weatherDestroyed ||
+          particle._weatherDestroyed ||
+          !state.particles.includes(particle)
+        ) {
+          continue;
+        }
+
+        particle.remove_transition("y");
+
+        if (
+          this.monitorStates.get(monitorActor) !== state ||
+          state.target !== target ||
+          monitorActor.actor !== actor ||
+          actor._weatherDestroyed ||
+          particle._weatherDestroyed ||
+          !state.particles.includes(particle)
+        ) {
+          continue;
+        }
+
+        this.animateParticle(monitorActor, state, particle, speed);
+      }
+    }
+  }
+
   clearAll(): void {
     for (const state of this.monitorStates.values()) {
       state.target = null;
@@ -314,7 +355,8 @@ export class ParticleManager {
       y: targetY,
       duration,
       mode: Clutter.AnimationMode.LINEAR,
-      onComplete: () => {
+      onStopped: (isFinished) => {
+        if (!isFinished) return;
         this.handleTransitionComplete(monitorActor, state, particle);
       },
     });
@@ -346,14 +388,12 @@ export class ParticleManager {
     particle.y = -20;
     particle.x = Math.random() * Math.max(1, monitorActor.monitor.width);
 
-    const speed = this.settings.get_int("speed");
-
     if (!this.settings.get_boolean("active")) {
       this.retireParticle(state, particle);
       return;
     }
 
-    this.animateParticle(monitorActor, state, particle, speed);
+    this.animateParticle(monitorActor, state, particle, state.target.speed);
   }
 
   private clearMonitorState(state: MonitorParticleState): void {
