@@ -197,6 +197,7 @@ weather-effect/
 │   │   ├── MonitorManager.ts       # MonitorLayerRecord lifecycle and layer actor placement
 │   │   ├── ObscurationManager.ts   # Active window occlusion and visibility tracking
 │   │   ├── ParticleManager.ts      # Particle actor lifecycle and Clutter transitions
+│   │   ├── ParticleProfiles.ts     # Particle profile resolution and settings migration
 │   │   ├── QuickSettings.ts        # Quick Settings toggle and indicator components
 │   │   └── WeatherEffectController.ts # Core orchestrator binding components and weather events
 │   └── schemas/
