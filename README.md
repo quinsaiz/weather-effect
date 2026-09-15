@@ -40,7 +40,7 @@ Enjoy the magic of falling snowflakes or raindrops on your GNOME desktop!
 - **Customizable Settings**:
   - Particles per runnable monitor: 5–50
   - Particle size (4–64 pixels)
-  - Speed control (Ultra Slow, Slow, Medium, Fast)
+  - Independent Snow and Rain speed control (Ultra Slow, Slow, Medium, Fast)
   - Color customization for snow and rain
   - Preinstalled emojis support
 - **Particle Rendering**: Each particle is an individual `St.Widget` or `St.Label` animated with a linear Clutter transition
@@ -49,7 +49,7 @@ Enjoy the magic of falling snowflakes or raindrops on your GNOME desktop!
 
 Particle count is per runnable monitor: a count of 5 with three runnable monitors means 5 particles on each monitor. If one monitor is blocked, its particles are not redistributed to the others.
 
-Snow Default, Snow Emoji, Rain Default, and Rain Emoji each retain independent particle count and size values. Switching effect or switching between a default shape and emoji restores the saved values for that profile.
+Snow Default (20 particles, size 4), Snow Emoji (20 particles, size 32), Rain Default (30 particles, size 4), and Rain Emoji (30 particles, size 12) each retain independent particle count and size values. Snow initially uses ❆. Snow and Rain also save independent speeds, defaulting to Slow and Medium respectively; switching between Default and Emoji within one effect keeps that effect's speed.
 
 ## Installation
 
@@ -212,7 +212,7 @@ The extension can be configured through the GNOME Extensions app settings:
 - **Display Mode**: Wallpaper or Screen
 - **Particles per runnable monitor**: 5–50
 - **Particle Size**: 4 to 64 pixels
-- **Speed**: Ultra Slow, Slow, Medium, or Fast
+- **Speed**: Ultra Slow, Slow, Medium, or Fast, saved independently for Snow and Rain
 - **Pause on Fullscreen**: Pause screen-mode particles on fullscreen-covered monitors
 - **Show in Quick Settings**: Show or hide the Weather Effect Quick Settings integration
 - **Show Panel Icon**: Show or hide its top-panel icon without removing the Quick Settings tile

@@ -58,13 +58,13 @@
       <description>Number of default-shape snow particles shown on each monitor.</description>
     </key>
     <key name="snow-default-particle-size" type="i">
-      <default>8</default>
+      <default>4</default>
       <range min="4" max="64"/>
       <summary>Snow default-shape particle size</summary>
       <description>Size in pixels of default-shape snow particles.</description>
     </key>
     <key name="snow-emoji-particle-count" type="i">
-      <default>10</default>
+      <default>20</default>
       <range min="5" max="50"/>
       <summary>Snow emoji particles per monitor</summary>
       <description>Number of emoji snow particles shown on each monitor.</description>
@@ -82,19 +82,19 @@
       <description>Number of default-shape rain particles shown on each monitor.</description>
     </key>
     <key name="rain-default-particle-size" type="i">
-      <default>8</default>
+      <default>4</default>
       <range min="4" max="64"/>
       <summary>Rain default-shape particle size</summary>
       <description>Size in pixels used to dimension default-shape rain particles.</description>
     </key>
     <key name="rain-emoji-particle-count" type="i">
-      <default>15</default>
+      <default>30</default>
       <range min="5" max="50"/>
       <summary>Rain emoji particles per monitor</summary>
       <description>Number of emoji rain particles shown on each monitor.</description>
     </key>
     <key name="rain-emoji-particle-size" type="i">
-      <default>32</default>
+      <default>12</default>
       <range min="4" max="64"/>
       <summary>Rain emoji particle size</summary>
       <description>Font size in pixels of emoji rain particles.</description>
@@ -110,6 +110,18 @@
       <summary>Speed</summary>
       <description>0=ultra-slow, 1=slow, 2=medium, 3=fast</description>
     </key>
+    <key name="snow-speed" type="i">
+      <default>1</default>
+      <range min="0" max="3"/>
+      <summary>Snow speed</summary>
+      <description>Snow particle speed: 0=ultra-slow, 1=slow, 2=medium, 3=fast</description>
+    </key>
+    <key name="rain-speed" type="i">
+      <default>2</default>
+      <range min="0" max="3"/>
+      <summary>Rain speed</summary>
+      <description>Rain particle speed: 0=ultra-slow, 1=slow, 2=medium, 3=fast</description>
+    </key>
     <key name="snow-color" type="s">
       <default>"white"</default>
       <summary>Snow color</summary>
@@ -121,7 +133,7 @@
       <description>Color of rain particles: gray or dark blue.</description>
     </key>
     <key name="snow-emoji" type="s">
-      <default>""</default>
+      <default>"❆"</default>
       <summary>Snow emoji</summary>
       <description>Custom emoji for snow particles (e.g., ❄, ❅, ❆). Leave empty for default circular shape.</description>
     </key>

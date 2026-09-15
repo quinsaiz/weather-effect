@@ -6,8 +6,11 @@ import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/
 import {
   migrateLegacyParticleProfile,
   resolveActiveParticleProfile,
+  resolveParticleSpeedKey,
+  type ParticleEffectType,
   type ParticleProfileCountKey,
   type ParticleProfileSizeKey,
+  type ParticleSpeedKey,
 } from "./lib/ParticleProfiles.js";
 
 export default class WeatherEffectPrefs extends ExtensionPreferences {
@@ -234,17 +237,49 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
         strings: ["Ultra Slow", "Slow", "Medium", "Fast"],
       }),
     });
-    const syncSpeedRow = () => {
-      const selected = settings.get_int("speed");
-      if (speedRow.selected !== selected) speedRow.selected = selected;
+    const presentSpeedValue = (selected: number) => {
+      if (speedRow.selected === selected) return;
+
+      presentingParticleProfile = true;
+      try {
+        speedRow.selected = selected;
+      } finally {
+        presentingParticleProfile = false;
+      }
     };
-    syncSpeedRow();
+    const presentSpeed = () => {
+      const effectType = settings.get_string(
+        "effect-type",
+      ) as ParticleEffectType;
+      presentSpeedValue(settings.get_int(resolveParticleSpeedKey(effectType)));
+    };
+    const presentEffectSpeed = (key: ParticleSpeedKey) => {
+      const effectType = settings.get_string(
+        "effect-type",
+      ) as ParticleEffectType;
+      if (resolveParticleSpeedKey(effectType) !== key) return;
+
+      presentSpeedValue(settings.get_int(key));
+    };
+    presentSpeed();
     speedRow.connect("notify::selected", () => {
-      if (settings.get_int("speed") !== speedRow.selected)
-        settings.set_int("speed", speedRow.selected);
+      if (presentingParticleProfile) return;
+
+      const effectType = settings.get_string(
+        "effect-type",
+      ) as ParticleEffectType;
+      const key = resolveParticleSpeedKey(effectType);
+      if (settings.get_int(key) !== speedRow.selected)
+        settings.set_int(key, speedRow.selected);
     });
     mappedSettingsHandlers.push(
-      settings.connect("changed::speed", syncSpeedRow)
+      settings.connect("changed::effect-type", presentSpeed),
+      settings.connect("changed::snow-speed", () =>
+        presentEffectSpeed("snow-speed"),
+      ),
+      settings.connect("changed::rain-speed", () =>
+        presentEffectSpeed("rain-speed"),
+      ),
     );
     particlesGroup.add(speedRow);
 

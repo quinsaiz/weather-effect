@@ -34,6 +34,8 @@ export type ParticleProfileKey =
   | ParticleProfileCountKey
   | ParticleProfileSizeKey;
 
+export type ParticleSpeedKey = "snow-speed" | "rain-speed";
+
 export type ResolvedParticleProfile = ParticleProfileKeys & {
   readonly count: number;
   readonly size: number;
@@ -99,7 +101,12 @@ export const PARTICLE_PROFILE_KEYS: readonly ParticleProfileKey[] =
     ...PARTICLE_PROFILE_SIZE_KEYS,
   ]);
 
-export const PARTICLE_PROFILE_MIGRATION_VERSION = 1;
+export const PARTICLE_SPEED_KEYS = Object.freeze({
+  snow: "snow-speed",
+  rain: "rain-speed",
+}) satisfies Readonly<Record<ParticleEffectType, ParticleSpeedKey>>;
+
+export const PARTICLE_PROFILE_MIGRATION_VERSION = 2;
 
 export function resolveParticleProfileId(
   effectType: ParticleEffectType,
@@ -108,6 +115,12 @@ export function resolveParticleProfileId(
 ): ParticleProfileId {
   const emoji = effectType === "snow" ? snowEmoji : rainEmoji;
   return `${effectType}-${emoji.trim() === "" ? "default" : "emoji"}`;
+}
+
+export function resolveParticleSpeedKey(
+  effectType: ParticleEffectType,
+): ParticleSpeedKey {
+  return PARTICLE_SPEED_KEYS[effectType];
 }
 
 export function resolveActiveParticleProfile(
@@ -133,18 +146,16 @@ export function readActiveParticleProfile(
 }
 
 /**
- * Copies explicit legacy particle values into the active profile once.
+ * Copies explicit legacy particle values into versioned active destinations.
  *
  * The caller must pass a dedicated settings instance because this function
  * puts it into irreversible delay-apply mode when migration is required.
  */
 export function migrateLegacyParticleProfile(settings: Gio.Settings): boolean {
-  if (
-    settings.get_uint("particle-profile-migration-version") >=
-    PARTICLE_PROFILE_MIGRATION_VERSION
-  ) {
-    return true;
-  }
+  const migrationVersion = settings.get_uint(
+    "particle-profile-migration-version",
+  );
+  if (migrationVersion >= PARTICLE_PROFILE_MIGRATION_VERSION) return true;
 
   const effectType = settings.get_string("effect-type") as ParticleEffectType;
   const snowEmoji = settings.get_string("snow-emoji");
@@ -153,8 +164,16 @@ export function migrateLegacyParticleProfile(settings: Gio.Settings): boolean {
     PARTICLE_PROFILES[
       resolveParticleProfileId(effectType, snowEmoji, rainEmoji)
     ];
-  const legacyCount = settings.get_user_value<"i">("particle-count");
-  const legacySize = settings.get_user_value<"i">("particle-size");
+  const speedKey = resolveParticleSpeedKey(effectType);
+  const legacyCount =
+    migrationVersion < 1
+      ? settings.get_user_value<"i">("particle-count")
+      : null;
+  const legacySize =
+    migrationVersion < 1
+      ? settings.get_user_value<"i">("particle-size")
+      : null;
+  const legacySpeed = settings.get_user_value<"i">("speed");
 
   settings.delay();
 
@@ -164,6 +183,11 @@ export function migrateLegacyParticleProfile(settings: Gio.Settings): boolean {
   }
 
   if (legacySize && !settings.set_value(profile.sizeKey, legacySize)) {
+    settings.revert();
+    return false;
+  }
+
+  if (legacySpeed && !settings.set_value(speedKey, legacySpeed)) {
     settings.revert();
     return false;
   }

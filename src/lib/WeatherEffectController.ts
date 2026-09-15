@@ -13,9 +13,11 @@ import {
   PARTICLE_PROFILES,
   resolveActiveParticleProfile,
   resolveParticleProfileId,
+  resolveParticleSpeedKey,
   type ParticleEffectType,
   type ParticleProfileCountKey,
   type ParticleProfileSizeKey,
+  type ParticleSpeedKey,
 } from "./ParticleProfiles.js";
 
 type DisplayMode = "wallpaper" | "screen";
@@ -176,11 +178,10 @@ export class WeatherEffectController {
     );
 
     this._settings.connectObject(
-      "changed::speed",
-      () => {
-        if (!this._isEnabled) return;
-        this._particleManager?.retimeSpeed();
-      },
+      "changed::snow-speed",
+      () => this._onSpeedChanged("snow-speed"),
+      "changed::rain-speed",
+      () => this._onSpeedChanged("rain-speed"),
       this,
     );
 
@@ -429,6 +430,17 @@ export class WeatherEffectController {
     this._refreshParticleAppearance();
   }
 
+  private _onSpeedChanged(key: ParticleSpeedKey) {
+    if (!this._isEnabled) return;
+
+    const effectType = this._settings.get_string(
+      "effect-type",
+    ) as ParticleEffectType;
+    if (resolveParticleSpeedKey(effectType) !== key) return;
+
+    this._particleManager?.retimeSpeed(this._settings.get_int(key));
+  }
+
   private _onEffectEmojiChanged(effectType: ParticleEffectType) {
     if (
       !this._isEnabled ||
@@ -563,13 +575,14 @@ export class WeatherEffectController {
       PARTICLE_PROFILES[
         resolveParticleProfileId(type, snowEmoji, rainEmoji)
       ];
+    const speedKey = resolveParticleSpeedKey(type);
     const emoji = (type === "snow" ? snowEmoji : rainEmoji).trim();
 
     return {
       type,
       count: this._settings.get_int(profile.countKey),
       size: this._settings.get_int(profile.sizeKey),
-      speed: this._settings.get_int("speed"),
+      speed: this._settings.get_int(speedKey),
       emoji: emoji === "" ? null : emoji,
       color: this._settings.get_string(`${type}-color`),
     };

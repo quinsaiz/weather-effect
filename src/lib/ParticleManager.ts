@@ -76,6 +76,13 @@ export class ParticleManager {
       state.target = target;
 
       if (target) {
+        if (
+          previousTarget &&
+          previousTarget.type !== target.type &&
+          previousTarget.speed !== target.speed
+        ) {
+          this.retimeMonitorState(monitorActor, state, target);
+        }
         this.reconcileMonitorState(
           monitorActor,
           state,
@@ -107,44 +114,52 @@ export class ParticleManager {
     }
   }
 
-  retimeSpeed(): void {
+  retimeSpeed(speed: number): void {
     if (!this.settings || !this.settings.get_boolean("active")) return;
 
-    const speed = this.settings.get_int("speed");
     for (const [monitorActor, state] of this.monitorStates) {
-      const actor = monitorActor.actor;
       const target = state.target;
-      if (!actor || actor._weatherDestroyed || !target) continue;
+      if (!target) continue;
 
       target.speed = speed;
+      this.retimeMonitorState(monitorActor, state, target);
+    }
+  }
 
-      for (const particle of [...state.particles]) {
-        if (
-          this.monitorStates.get(monitorActor) !== state ||
-          state.target !== target ||
-          monitorActor.actor !== actor ||
-          actor._weatherDestroyed ||
-          particle._weatherDestroyed ||
-          !state.particles.includes(particle)
-        ) {
-          continue;
-        }
+  private retimeMonitorState(
+    monitorActor: MonitorLayerRecord,
+    state: MonitorParticleState,
+    target: ParticleTarget,
+  ): void {
+    const actor = monitorActor.actor;
+    if (!actor || actor._weatherDestroyed) return;
 
-        particle.remove_transition("y");
-
-        if (
-          this.monitorStates.get(monitorActor) !== state ||
-          state.target !== target ||
-          monitorActor.actor !== actor ||
-          actor._weatherDestroyed ||
-          particle._weatherDestroyed ||
-          !state.particles.includes(particle)
-        ) {
-          continue;
-        }
-
-        this.animateParticle(monitorActor, state, particle, speed);
+    for (const particle of [...state.particles]) {
+      if (
+        this.monitorStates.get(monitorActor) !== state ||
+        state.target !== target ||
+        monitorActor.actor !== actor ||
+        actor._weatherDestroyed ||
+        particle._weatherDestroyed ||
+        !state.particles.includes(particle)
+      ) {
+        continue;
       }
+
+      particle.remove_transition("y");
+
+      if (
+        this.monitorStates.get(monitorActor) !== state ||
+        state.target !== target ||
+        monitorActor.actor !== actor ||
+        actor._weatherDestroyed ||
+        particle._weatherDestroyed ||
+        !state.particles.includes(particle)
+      ) {
+        continue;
+      }
+
+      this.animateParticle(monitorActor, state, particle, target.speed);
     }
   }
 
