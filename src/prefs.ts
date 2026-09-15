@@ -5,6 +5,7 @@ import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/
 
 import {
   migrateLegacyParticleProfile,
+  PARTICLE_PROFILE_MIGRATION_VERSION,
   resolveActiveParticleProfile,
   resolveParticleSpeedKey,
   type ParticleEffectType,
@@ -12,6 +13,47 @@ import {
   type ParticleProfileSizeKey,
   type ParticleSpeedKey,
 } from "./lib/ParticleProfiles.js";
+
+const FACTORY_RESET_KEYS = Object.freeze([
+  "display-mode",
+  "active",
+  "effect-type",
+  "show-in-quick-settings",
+  "show-panel-icon",
+  "pause-on-fullscreen",
+  "snow-color",
+  "rain-color",
+  "snow-emoji",
+  "rain-emoji",
+  "particle-count",
+  "particle-size",
+  "speed",
+  "snow-default-particle-count",
+  "snow-default-particle-size",
+  "snow-emoji-particle-count",
+  "snow-emoji-particle-size",
+  "rain-default-particle-count",
+  "rain-default-particle-size",
+  "rain-emoji-particle-count",
+  "rain-emoji-particle-size",
+  "snow-speed",
+  "rain-speed",
+]);
+
+function resetAllSettings(resetSettings: Gio.Settings): void {
+  resetSettings.delay();
+  if (
+    !resetSettings.set_uint(
+      "particle-profile-migration-version",
+      PARTICLE_PROFILE_MIGRATION_VERSION,
+    )
+  ) {
+    resetSettings.revert();
+    return;
+  }
+  for (const key of FACTORY_RESET_KEYS) resetSettings.reset(key);
+  resetSettings.apply();
+}
 
 export default class WeatherEffectPrefs extends ExtensionPreferences {
   fillPreferencesWindow(window: Adw.PreferencesWindow): Promise<void> {
@@ -112,6 +154,58 @@ export default class WeatherEffectPrefs extends ExtensionPreferences {
       Gio.SettingsBindFlags.DEFAULT
     );
     generalGroup.add(pauseRow);
+
+    const resetGroup = new Adw.PreferencesGroup({ title: "Reset" });
+    generalPage.add(resetGroup);
+
+    const resetRow = new Adw.ActionRow({
+      title: "Reset All Settings",
+      subtitle:
+        "Restore all Weather Effect settings and particle presets to their defaults.",
+    });
+    const resetButton = new Gtk.Button({
+      label: "Reset…",
+      valign: Gtk.Align.CENTER,
+    });
+    resetRow.add_suffix(resetButton);
+    resetGroup.add(resetRow);
+
+    let windowAlive = true;
+    const activeResetDialogs = new Set<Adw.MessageDialog>();
+    resetButton.connect("clicked", () => {
+      if (!windowAlive) return;
+
+      const dialog = new Adw.MessageDialog({
+        transient_for: window,
+        modal: true,
+        heading: "Reset All Settings?",
+        body:
+          "All Weather Effect settings and saved particle presets will be restored to their defaults.",
+      });
+      dialog.add_response("cancel", "Cancel");
+      dialog.add_response("reset", "Reset");
+      dialog.set_default_response("cancel");
+      dialog.set_close_response("cancel");
+      dialog.set_response_appearance(
+        "reset",
+        Adw.ResponseAppearance.DESTRUCTIVE,
+      );
+
+      let handled = false;
+      dialog.connect("response", (_dialog, response: string) => {
+        if (response !== "reset" || handled || !windowAlive) return;
+        handled = true;
+        resetAllSettings(this.getSettings());
+      });
+      dialog.connect("destroy", () => activeResetDialogs.delete(dialog));
+      activeResetDialogs.add(dialog);
+      dialog.present();
+    });
+    window.connect("destroy", () => {
+      windowAlive = false;
+      for (const dialog of activeResetDialogs) dialog.destroy();
+      activeResetDialogs.clear();
+    });
 
     const particlesPage = new Adw.PreferencesPage({
       title: "Particles",
