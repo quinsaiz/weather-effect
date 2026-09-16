@@ -6,7 +6,8 @@
   "scripts": {
     "validate:static": "bash scripts/validate.sh",
     "typecheck": "test -x ./node_modules/.bin/tsc || { echo 'TypeScript is not installed; run npm ci first.' >&2; exit 1; }; ./node_modules/.bin/tsc -p tsconfig.json --noEmit",
-    "validate": "npm run validate:static && npm run typecheck",
+    "test": "node tests/particle-lifecycle.test.mjs",
+    "validate": "npm run validate:static && npm run typecheck && npm test",
     "build": "npm run validate && scripts/build.sh --clean && ./node_modules/.bin/tsc -p tsconfig.json && scripts/build.sh --pack",
     "validate:package": "scripts/build.sh --validate-package",
     "install:extension": "npm run build && scripts/build.sh --install",

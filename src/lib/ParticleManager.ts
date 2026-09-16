@@ -34,10 +34,26 @@ interface MonitorParticleState {
  */
 export class ParticleManager {
   private settings: Gio.Settings | null;
+  private animationSettings: St.Settings | null;
+  private animationSettingsHandlerIds: number[];
   private monitorStates: Map<MonitorLayerRecord, MonitorParticleState> = new Map();
 
   constructor(settings: Gio.Settings) {
     this.settings = settings;
+    const animationSettings = St.Settings.get();
+    this.animationSettings = animationSettings;
+    this.animationSettingsHandlerIds = [
+      "notify::enable-animations",
+      "notify::slow-down-factor",
+    ].map((signal) =>
+      animationSettings.connect(signal, () => {
+        for (const [monitorActor, state] of this.monitorStates) {
+          for (const particle of [...state.particles]) {
+            this.syncParticleAnimation(monitorActor, state, particle);
+          }
+        }
+      }),
+    );
   }
 
   reconcile(
@@ -171,6 +187,11 @@ export class ParticleManager {
   }
 
   destroy(): void {
+    for (const id of this.animationSettingsHandlerIds) {
+      this.animationSettings?.disconnect(id);
+    }
+    this.animationSettingsHandlerIds = [];
+    this.animationSettings = null;
     this.clearAll();
 
     for (const [monitorActor, state] of this.monitorStates) {
@@ -356,6 +377,10 @@ export class ParticleManager {
     }
 
     particle._weatherDestroyed = false;
+    // Child mapping notifications also cover parent-layer unmap/remap ordering.
+    particle.connect("notify::mapped", () => {
+      this.syncParticleAnimation(monitorActor, state, particle);
+    });
     particle.connect("destroy", (destroyedParticle) => {
       destroyedParticle._weatherDestroyed = true;
       const index = state.particles.indexOf(destroyedParticle);
@@ -365,46 +390,99 @@ export class ParticleManager {
     return particle;
   }
 
+  private syncParticleAnimation(
+    monitorActor: MonitorLayerRecord,
+    state: MonitorParticleState,
+    particle: ParticleActor,
+  ): void {
+    const actor = monitorActor.actor;
+    if (
+      !this.settings ||
+      this.monitorStates.get(monitorActor) !== state ||
+      !state.target ||
+      !state.particles.includes(particle) ||
+      !actor ||
+      actor._weatherDestroyed ||
+      particle._weatherDestroyed
+    ) {
+      return;
+    }
+
+    if (!this.canAnimate(particle)) {
+      particle.remove_transition("y");
+    } else if (!particle.get_transition("y")) {
+      this.animateParticle(monitorActor, state, particle, state.target.speed);
+    }
+  }
+
+  private canAnimate(particle: ParticleActor): boolean {
+    return (
+      !!this.settings?.get_boolean("active") &&
+      !!this.animationSettings?.enable_animations &&
+      this.animationSettings.slow_down_factor > 0 &&
+      particle.mapped
+    );
+  }
+
   private animateParticle(
     monitorActor: MonitorLayerRecord,
     state: MonitorParticleState,
     particle: ParticleActor,
     speed: number,
   ): void {
-    const actor = monitorActor.actor;
-    if (
-      particle._weatherDestroyed ||
-      !actor ||
-      actor._weatherDestroyed
-    ) {
-      return;
+    // A sub-millisecond tail can finish inline. Allow one full-cycle attempt,
+    // but never recurse or schedule retries if Shell keeps skipping transitions.
+    // Mapping/animation-setting notifications resume particles when available.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const actor = monitorActor.actor;
+      if (
+        this.monitorStates.get(monitorActor) !== state ||
+        !state.target ||
+        !state.particles.includes(particle) ||
+        particle._weatherDestroyed ||
+        !actor ||
+        actor._weatherDestroyed ||
+        !this.canAnimate(particle)
+      ) {
+        return;
+      }
+
+      const monitorHeight = Math.max(1, monitorActor.monitor.height);
+      const baseDuration = this.getBaseDuration(speed);
+      const targetY = monitorHeight + 20;
+      const totalDistance = targetY + 20;
+      const distanceToTravel = Math.max(1, targetY - particle.y);
+      const duration =
+        (distanceToTravel / totalDistance) *
+        (baseDuration + Math.random() * 500);
+
+      let starting = true;
+      let completedSynchronously = false;
+      particle.show();
+      particle.ease({
+        y: targetY,
+        duration,
+        mode: Clutter.AnimationMode.LINEAR,
+        onStopped: (isFinished) => {
+          if (!isFinished) return;
+          if (starting) {
+            completedSynchronously = true;
+            return;
+          }
+          this.handleTransitionComplete(monitorActor, state, particle);
+        },
+      });
+      starting = false;
+      if (!completedSynchronously) return;
+      this.handleTransitionComplete(monitorActor, state, particle, false);
     }
-
-    const monitorHeight = Math.max(1, monitorActor.monitor.height);
-    const baseDuration = this.getBaseDuration(speed);
-    const targetY = monitorHeight + 20;
-    const totalDistance = targetY + 20;
-    const distanceToTravel = Math.max(1, targetY - particle.y);
-    const duration =
-      (distanceToTravel / totalDistance) *
-      (baseDuration + Math.random() * 500);
-
-    particle.show();
-    particle.ease({
-      y: targetY,
-      duration,
-      mode: Clutter.AnimationMode.LINEAR,
-      onStopped: (isFinished) => {
-        if (!isFinished) return;
-        this.handleTransitionComplete(monitorActor, state, particle);
-      },
-    });
   }
 
   private handleTransitionComplete(
     monitorActor: MonitorLayerRecord,
     state: MonitorParticleState,
     particle: ParticleActor,
+    restart = true,
   ): void {
     // Completion can arrive after retirement or monitor-layer replacement.
     if (
@@ -432,7 +510,9 @@ export class ParticleManager {
       return;
     }
 
-    this.animateParticle(monitorActor, state, particle, state.target.speed);
+    if (restart) {
+      this.animateParticle(monitorActor, state, particle, state.target.speed);
+    }
   }
 
   private clearMonitorState(state: MonitorParticleState): void {
