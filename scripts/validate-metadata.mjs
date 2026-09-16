@@ -5,7 +5,7 @@ import { basename, join } from 'node:path';
 
 const EXPECTED_UUID = 'weather-effect@quinsaiz.github';
 const EXPECTED_SCHEMA_ID = 'org.gnome.shell.extensions.weather-effect';
-const EXPECTED_SHELL_VERSIONS = ['45', '46', '47', '48', '49', '50'];
+const EXPECTED_SHELL_VERSIONS = ['45', '46', '47', '48', '49', '50', '51'];
 
 function fail(message) {
   console.error(`[ERROR] ${message}`);

@@ -2,10 +2,10 @@
   "name": "Weather Effect",
   "description": "Adds animated snow and rain effects to GNOME Shell.",
   "uuid": "weather-effect@quinsaiz.github",
-  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "shell-version": ["45", "46", "47", "48", "49", "50", "51"],
   "settings-schema": "org.gnome.shell.extensions.weather-effect",
   "url": "https://github.com/quinsaiz/weather-effect",
   "author": "quinsaiz",
-  "version": 3,
-  "version-name": "2.6.0"
+  "version": 4,
+  "version-name": "2.6.1"
 }

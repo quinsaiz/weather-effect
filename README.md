@@ -4,7 +4,7 @@
 
 ![GNOME Extension](https://img.shields.io/badge/GNOME-Extension-blue?style=for-the-badge&logo=gnome)
 ![License](https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-2.6.0-orange?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.6.1-orange?style=for-the-badge)
 
 </div>
 
@@ -55,7 +55,7 @@ Snow Default (20 particles, size 4), Snow Emoji (20 particles, size 32), Rain De
 
 ### Prerequisites
 
-- GNOME Shell 45 through 50
+- GNOME Shell 45 through 51
 
 ### From GNOME Extensions
 
@@ -202,6 +202,8 @@ weather-effect/
 │   │   └── WeatherEffectController.ts # Core orchestrator binding components and weather events
 │   └── schemas/
 │       └── org.gnome.shell.extensions.weather-effect.gschema.xml # GSettings schema definition
+├── tests/
+│   └── particle-lifecycle.test.mjs # Particle transition and lifecycle regression tests
 └── tsconfig.json                   # TypeScript compiler configuration
 ```
 
