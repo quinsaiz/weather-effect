@@ -4,7 +4,7 @@
 
 ![GNOME Extension](https://img.shields.io/badge/GNOME-Extension-blue?style=for-the-badge&logo=gnome)
 ![License](https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-2.5.0-orange?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.6.0-orange?style=for-the-badge)
 
 </div>
 
