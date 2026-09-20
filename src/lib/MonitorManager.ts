@@ -158,7 +158,7 @@ export class MonitorManager {
       const monitorActor = this.monitorActors[i];
 
       if (
-        !monitorActor?.actor || monitorActor.actor._weatherDestroyed
+        !monitorActor.actor || monitorActor.actor._weatherDestroyed
       ) {
         this.monitorActors.splice(i, 1);
         continue;
@@ -204,13 +204,11 @@ export class MonitorManager {
     this.monitorActors = [];
 
     for (const monitorActor of monitorActors) {
-      if (monitorActor) {
-        if (
-          monitorActor.actor && !monitorActor.actor._weatherDestroyed
-        ) {
-          monitorActor.actor.destroy();
-          monitorActor.actor = null;
-        }
+      if (
+        monitorActor.actor && !monitorActor.actor._weatherDestroyed
+      ) {
+        monitorActor.actor.destroy();
+        monitorActor.actor = null;
       }
     }
   }

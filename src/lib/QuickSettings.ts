@@ -12,9 +12,7 @@ type EffectType = "snow" | "rain";
 /** Quick Settings toggle bound to the active setting. */
 export const WeatherToggle = GObject.registerClass(
   class WeatherToggle extends QuickMenuToggle {
-    // Shell may destroy the toggle before indicator callbacks are disconnected.
-    declare public _weatherDestroyed: boolean;
-    private _settings: Gio.Settings | null;
+    private readonly _settings: Gio.Settings;
     private _snowButton: St.Button | null = null;
     private _rainButton: St.Button | null = null;
     private _buttonBox: St.BoxLayout | null = null;
@@ -24,11 +22,6 @@ export const WeatherToggle = GObject.registerClass(
         title: "Weather Effect",
         iconName: "weather-snow-symbolic",
         toggleMode: true,
-      });
-
-      this._weatherDestroyed = false;
-      this.connect("destroy", (actor) => {
-        actor._weatherDestroyed = true;
       });
 
       this._settings = settings;
@@ -74,8 +67,8 @@ export const WeatherToggle = GObject.registerClass(
       this._buttonBox.add_child(snowBox);
 
       this._snowButton.connectObject("clicked", () => {
-        (this._settings as Gio.Settings).set_string("effect-type", "snow");
-        (this._settings as Gio.Settings).set_boolean("active", true);
+        this._settings.set_string("effect-type", "snow");
+        this._settings.set_boolean("active", true);
         this._updateButtons();
         this.iconName = "weather-snow-symbolic";
       }, this);
@@ -102,8 +95,8 @@ export const WeatherToggle = GObject.registerClass(
       this._buttonBox.add_child(rainBox);
 
       this._rainButton.connectObject("clicked", () => {
-        (this._settings as Gio.Settings).set_string("effect-type", "rain");
-        (this._settings as Gio.Settings).set_boolean("active", true);
+        this._settings.set_string("effect-type", "rain");
+        this._settings.set_boolean("active", true);
         this._updateButtons();
         this.iconName = "weather-showers-symbolic";
       }, this);
@@ -115,7 +108,7 @@ export const WeatherToggle = GObject.registerClass(
         () => {
           this._updateButtons();
           const effectType: EffectType =
-            (this._settings as Gio.Settings).get_string(
+            this._settings.get_string(
               "effect-type",
             ) as EffectType;
           this.iconName =
@@ -130,7 +123,7 @@ export const WeatherToggle = GObject.registerClass(
     }
 
     _updateButtons() {
-      if (!this._settings || !this._snowButton || !this._rainButton) return;
+      if (!this._snowButton || !this._rainButton) return;
       const effectType = this._settings.get_string(
         "effect-type",
       ) as EffectType;
@@ -149,11 +142,10 @@ export const WeatherToggle = GObject.registerClass(
     }
 
     destroy() {
-      this._settings?.disconnectObject(this);
+      this._settings.disconnectObject(this);
       this._snowButton?.disconnectObject(this);
       this._rainButton?.disconnectObject(this);
 
-      this._settings = null;
       this._snowButton = null;
       this._rainButton = null;
       this._buttonBox = null;
@@ -166,9 +158,9 @@ export const WeatherToggle = GObject.registerClass(
 /** Indicator reflecting the selected effect and active state. */
 export const WeatherIndicator = GObject.registerClass(
   class WeatherIndicator extends SystemIndicator {
-    public toggle!: InstanceType<typeof WeatherToggle> | null;
-    private _indicator: St.Icon | null;
-    private _settings: Gio.Settings | null;
+    public readonly toggle: InstanceType<typeof WeatherToggle>;
+    private readonly _indicator: St.Icon;
+    private readonly _settings: Gio.Settings;
 
     constructor(settings: Gio.Settings) {
       super();
@@ -201,13 +193,6 @@ export const WeatherIndicator = GObject.registerClass(
     }
 
     _updateIndicatorIcon() {
-      if (
-        !this._settings ||
-        !this.toggle ||
-        !this._indicator ||
-        this.toggle._weatherDestroyed
-      )
-        return;
       const effectType = this._settings.get_string("effect-type") as EffectType;
       const checked = this.toggle.checked;
       this._indicator.icon_name = checked
@@ -218,18 +203,12 @@ export const WeatherIndicator = GObject.registerClass(
     }
 
     destroy() {
-      this._settings?.disconnectObject(this);
-      this.toggle?.disconnectObject(this);
+      this._settings.disconnectObject(this);
+      this.toggle.disconnectObject(this);
 
-      if (this.toggle) {
-        this.toggle.destroy();
-        this.toggle = null;
-      }
+      this.toggle.destroy();
 
       this.quickSettingsItems.length = 0;
-
-      this._settings = null;
-      this._indicator = null;
 
       super.destroy();
     }

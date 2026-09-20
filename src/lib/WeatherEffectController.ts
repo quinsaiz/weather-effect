@@ -217,7 +217,7 @@ export class WeatherEffectController {
         if (!this._isEnabled || !this._monitorManager) return;
 
         this._particleManager?.clearAll();
-        this._monitorManager?.attachMonitorActors();
+        this._monitorManager.attachMonitorActors();
         this._recomputeObscuration();
         this._refreshFullscreenStateAndReconcile();
       },
