@@ -2,7 +2,7 @@
 
 # Weather Effect GNOME Extension
 
-![GNOME Extension](https://img.shields.io/badge/GNOME-Extension-blue?style=for-the-badge&logo=gnome)
+![GNOME Extension](https://img.shields.io/badge/GNOME-Shell-blue?style=for-the-badge&logo=gnome)
 ![License](https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge)
 ![Version](https://img.shields.io/badge/Version-2.6.2-orange?style=for-the-badge)
 
